@@ -25,9 +25,8 @@
  *                   promptManager write, saveSettingsDebounced]
  */
 
-import { oai_settings, promptManager, saveSettingsDebounced as saveOaiDebounced }
-    from '../../../../scripts/openai.js';
-import { saveSettingsDebounced } from '../../../../script.js';
+import { oai_settings, promptManager } from '../../../../scripts/openai.js';
+import { saveSettingsDebounced }       from '../../../../script.js';
 import { log, error }            from './log.js';
 import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
 
@@ -148,7 +147,7 @@ function _commitSysPrompt(draft) {
         const key = KEY_MAP[fieldId];
         if (key) oai_settings[key] = value;
     }
-    saveOaiDebounced();
+    saveSettingsDebounced();
     log(TAG, 'System prompt fields committed');
 }
 
