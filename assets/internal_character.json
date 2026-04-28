@@ -1,0 +1,21 @@
+{
+    "spec": "chara_card_v2",
+    "spec_version": "2.0",
+    "data": {
+        "name": "Characteryze",
+        "description": "",
+        "personality": "",
+        "scenario": "",
+        "first_mes": "",
+        "mes_example": "",
+        "creator_notes": "Internal Characteryze session host. Do not modify or chat with this character directly.",
+        "system_prompt": "",
+        "post_history_instructions": "",
+        "tags": [],
+        "creator": "Characteryze",
+        "character_version": "1.0",
+        "extensions": {
+            "characteryze_internal": true
+        }
+    }
+}

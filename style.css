@@ -1,0 +1,376 @@
+/* ============================================================================
+   Characteryze — style.css
+   stamp: 2026-04-28T00:00:00.000Z
+   All CTZ selectors are prefixed .ctz- to avoid collisions with ST styles.
+   ============================================================================ */
+
+/* ─── CSS variables (inherits ST colour tokens where available) ─────────────── */
+:root {
+    --ctz-bg:           #1e1e2e;
+    --ctz-surface:      #2a2a3e;
+    --ctz-border:       #3a3a5c;
+    --ctz-text:         #cdd6f4;
+    --ctz-muted:        #6c7086;
+    --ctz-accent:       #89b4fa;
+    --ctz-accent-hover: #b4d0ff;
+    --ctz-danger:       #f38ba8;
+    --ctz-success:      #a6e3a1;
+    --ctz-radius:       6px;
+    --ctz-tab-h:        40px;
+    --ctz-strip-h:      54px;
+}
+
+/* ─── Overlay container ─────────────────────────────────────────────────────── */
+.ctz-overlay {
+    position:   fixed;
+    top:        0;
+    left:       0;
+    width:      100%;
+    z-index:    9000;
+    display:    flex;
+    flex-direction: column;
+    pointer-events: none;
+}
+
+.ctz-overlay.ctz-hidden {
+    display: none;
+}
+
+/* In chat mode only the tab bar is full-height; panels collapse */
+.ctz-overlay.ctz-chat-mode .ctz-panel-area {
+    display: none;
+}
+
+/* ─── Tab bar ────────────────────────────────────────────────────────────────── */
+.ctz-tab-bar {
+    display:         flex;
+    align-items:     center;
+    justify-content: space-between;
+    height:          var(--ctz-tab-h);
+    background:      var(--ctz-bg);
+    border-bottom:   1px solid var(--ctz-border);
+    padding:         0 8px;
+    pointer-events:  all;
+}
+
+.ctz-tabs {
+    display: flex;
+    gap:     4px;
+}
+
+.ctz-tab-btn {
+    background:    transparent;
+    border:        1px solid transparent;
+    border-radius: var(--ctz-radius);
+    color:         var(--ctz-muted);
+    cursor:        pointer;
+    font-size:     13px;
+    padding:       4px 12px;
+    transition:    color .15s, border-color .15s;
+}
+
+.ctz-tab-btn:hover {
+    color:        var(--ctz-text);
+    border-color: var(--ctz-border);
+}
+
+.ctz-tab-btn.ctz-tab-active {
+    color:        var(--ctz-accent);
+    border-color: var(--ctz-accent);
+    font-weight:  600;
+}
+
+.ctz-exit-btn {
+    background:    transparent;
+    border:        none;
+    color:         var(--ctz-muted);
+    cursor:        pointer;
+    font-size:     16px;
+    line-height:   1;
+    padding:       4px 8px;
+}
+
+.ctz-exit-btn:hover { color: var(--ctz-danger); }
+
+/* ─── Panel area ─────────────────────────────────────────────────────────────── */
+.ctz-panel-area {
+    pointer-events: all;
+}
+
+.ctz-panel {
+    background:   var(--ctz-bg);
+    border-bottom: 1px solid var(--ctz-border);
+    max-height:   calc(100vh - var(--ctz-tab-h) - 60px);
+    overflow-y:   auto;
+    padding:      12px 16px;
+}
+
+.ctz-panel.ctz-hidden { display: none; }
+
+/* ─── Forge strip ─────────────────────────────────────────────────────────────  */
+.ctz-forge-strip {
+    display:         flex;
+    align-items:     center;
+    gap:             16px;
+    height:          var(--ctz-strip-h);
+    padding:         0 12px;
+    flex-wrap:       wrap;
+}
+
+.ctz-forge-info {
+    display:     flex;
+    align-items: center;
+    gap:         12px;
+    flex:        1;
+    min-width:   0;
+    overflow:    hidden;
+}
+
+.ctz-forge-meta { font-size: 12px; white-space: nowrap; }
+.ctz-label-sm   { font-size: 11px; color: var(--ctz-muted); }
+
+.ctz-ruleset-wrap { flex-shrink: 0; }
+
+.ctz-ruleset-details { display: inline-block; }
+
+.ctz-ruleset-summary {
+    cursor:      pointer;
+    font-size:   12px;
+    color:       var(--ctz-accent);
+    user-select: none;
+}
+
+.ctz-ruleset-list {
+    background:    var(--ctz-surface);
+    border:        1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    padding:       6px 8px;
+    display:       flex;
+    flex-direction: column;
+    gap:           4px;
+    position:      absolute;
+    z-index:       100;
+    min-width:     180px;
+}
+
+.ctz-ruleset-item {
+    display:     flex;
+    align-items: center;
+    gap:         6px;
+    font-size:   12px;
+    cursor:      pointer;
+}
+
+/* ─── Home panel ─────────────────────────────────────────────────────────────── */
+.ctz-home-panel { display: flex; flex-direction: column; gap: 16px; }
+
+.ctz-session-list {
+    display:        flex;
+    flex-direction: column;
+    gap:            4px;
+    max-height:     200px;
+    overflow-y:     auto;
+}
+
+.ctz-session-row {
+    display:       flex;
+    align-items:   center;
+    gap:           8px;
+    padding:       4px 8px;
+    border-radius: var(--ctz-radius);
+    border:        1px solid var(--ctz-border);
+}
+
+.ctz-session-name { flex: 1; font-size: 13px; }
+.ctz-session-meta { font-size: 11px; color: var(--ctz-muted); }
+
+/* ─── Workbench ──────────────────────────────────────────────────────────────── */
+.ctz-workbench {
+    display: flex;
+    gap:     12px;
+    height:  100%;
+}
+
+.ctz-wb-sidebar {
+    width:          200px;
+    flex-shrink:    0;
+    display:        flex;
+    flex-direction: column;
+    gap:            6px;
+}
+
+.ctz-block-list {
+    flex:       1;
+    overflow-y: auto;
+    display:    flex;
+    flex-direction: column;
+    gap:        4px;
+}
+
+.ctz-block-item {
+    padding:       4px 8px;
+    border:        1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    cursor:        pointer;
+    font-size:     12px;
+}
+
+.ctz-block-item:hover { border-color: var(--ctz-accent); }
+
+.ctz-block-lang {
+    display:       inline-block;
+    font-size:     10px;
+    background:    var(--ctz-surface);
+    border-radius: 3px;
+    padding:       1px 5px;
+    margin-right:  4px;
+    color:         var(--ctz-accent);
+}
+
+.ctz-block-preview { color: var(--ctz-muted); font-size: 11px; }
+
+.ctz-wb-main {
+    flex:           1;
+    display:        flex;
+    flex-direction: column;
+    gap:            8px;
+    min-width:      0;
+}
+
+.ctz-wb-toolbar {
+    display:     flex;
+    align-items: center;
+    gap:         8px;
+}
+
+.ctz-diff-panes {
+    display: flex;
+    gap:     8px;
+    flex:    1;
+}
+
+.ctz-pane {
+    flex:           1;
+    display:        flex;
+    flex-direction: column;
+    min-width:      0;
+}
+
+.ctz-pane-header {
+    font-size:   11px;
+    color:       var(--ctz-muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.ctz-pane-text {
+    flex:         1;
+    resize:       none;
+    background:   var(--ctz-surface);
+    border:       1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    color:        var(--ctz-text);
+    font-family:  monospace;
+    font-size:    12px;
+    min-height:   180px;
+    padding:      8px;
+    width:        100%;
+}
+
+.ctz-pane-live .ctz-pane-text { opacity: .75; }
+
+.ctz-portrait-preview {
+    display:        flex;
+    align-items:    center;
+    gap:            12px;
+    padding-top:    8px;
+}
+
+.ctz-portrait-preview img {
+    width:         120px;
+    height:        120px;
+    object-fit:    cover;
+    border-radius: var(--ctz-radius);
+    border:        1px solid var(--ctz-border);
+}
+
+/* ─── Settings panel ─────────────────────────────────────────────────────────── */
+.ctz-settings-panel { display: flex; flex-direction: column; gap: 16px; }
+
+/* ─── Shared form elements ───────────────────────────────────────────────────── */
+.ctz-section { display: flex; flex-direction: column; gap: 8px; }
+
+.ctz-section-title {
+    font-size:     13px;
+    font-weight:   600;
+    color:         var(--ctz-accent);
+    margin:        0 0 4px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.ctz-form-row {
+    display:     flex;
+    align-items: center;
+    gap:         10px;
+}
+
+.ctz-label {
+    width:      130px;
+    flex-shrink: 0;
+    font-size:  12px;
+    color:      var(--ctz-muted);
+}
+
+.ctz-select,
+.ctz-input {
+    background:    var(--ctz-surface);
+    border:        1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    color:         var(--ctz-text);
+    font-size:     12px;
+    padding:       4px 8px;
+    flex:          1;
+}
+
+.ctz-input-sm { max-width: 80px; flex: unset; }
+
+.ctz-textarea {
+    resize:     vertical;
+    min-height: 60px;
+    font-family: inherit;
+}
+
+.ctz-btn {
+    background:    var(--ctz-surface);
+    border:        1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    color:         var(--ctz-text);
+    cursor:        pointer;
+    font-size:     12px;
+    padding:       5px 12px;
+    transition:    border-color .15s;
+    white-space:   nowrap;
+}
+
+.ctz-btn:hover         { border-color: var(--ctz-accent); }
+.ctz-btn:disabled      { opacity: .4; cursor: not-allowed; }
+
+.ctz-btn-primary {
+    background:    var(--ctz-accent);
+    border-color:  var(--ctz-accent);
+    color:         #1e1e2e;
+    font-weight:   600;
+}
+
+.ctz-btn-primary:hover { background: var(--ctz-accent-hover); border-color: var(--ctz-accent-hover); }
+
+.ctz-btn-sm { font-size: 11px; padding: 3px 8px; }
+
+.ctz-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--ctz-accent); }
+.ctz-hint     { font-size: 11px; color: var(--ctz-muted); }
+.ctz-muted    { color: var(--ctz-muted); font-size: 12px; }
+.ctz-hidden   { display: none !important; }
+
+.ctz-target-controls { display: flex; flex: 1; gap: 8px; }
