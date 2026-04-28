@@ -20,7 +20,8 @@
  *     external_io: [DOM, extension_settings write, saveSettingsDebounced, setVerbose]
  */
 
-import { extension_settings, saveSettingsDebounced } from '../../../extensions.js';
+import { extension_settings }    from '../../../extensions.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { log }                                        from './log.js';
 import { setVerbose, isVerbose }                      from './log.js';
 import { CTZ_EXT_NAME, DEFAULT_PORTRAIT_PROMPT_TEMPLATE } from './defaults.js';

@@ -22,8 +22,8 @@
  *                   saveSettingsDebounced, toastr]
  */
 
-import { extension_settings, saveSettingsDebounced, renderExtensionTemplateAsync }
-    from '../../../extensions.js';
+import { extension_settings, renderExtensionTemplateAsync } from '../../../extensions.js';
+import { saveSettingsDebounced }                            from '../../../../script.js';
 import { eventSource, event_types }           from '../../../../script.js';
 import { log, error, setVerbose }             from './log.js';
 import { CTZ_EXT_NAME, DEFAULT_SETTINGS }     from './defaults.js';

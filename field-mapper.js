@@ -27,7 +27,7 @@
 
 import { oai_settings, promptManager, saveSettingsDebounced as saveOaiDebounced }
     from '../../../../scripts/openai.js';
-import { saveSettingsDebounced } from '../../../extensions.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { log, error }            from './log.js';
 import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
 

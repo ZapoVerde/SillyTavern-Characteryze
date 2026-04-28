@@ -33,7 +33,8 @@
  *                   extension_settings write, saveSettingsDebounced, toastr]
  */
 
-import { extension_settings, saveSettingsDebounced } from '../../../extensions.js';
+import { extension_settings }    from '../../../extensions.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types, doNewChat }        from '../../../../script.js';
 import { log, warn, error }                           from './log.js';
 import {

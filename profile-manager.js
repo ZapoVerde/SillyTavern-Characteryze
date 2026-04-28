@@ -28,7 +28,8 @@
  *                   extension_settings write, DOM (#rm_button_characters)]
  */
 
-import { extension_settings, saveSettingsDebounced } from '../../../extensions.js';
+import { extension_settings }    from '../../../extensions.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types }                  from '../../../../script.js';
 import { log, warn, error }                          from './log.js';
 import { CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME }      from './defaults.js';
