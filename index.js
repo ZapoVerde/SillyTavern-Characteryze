@@ -22,7 +22,7 @@
  *                   saveSettingsDebounced, toastr]
  */
 
-import { extension_settings, renderExtensionTemplateAsync } from '../../../extensions.js';
+import { extension_settings } from '../../../extensions.js';
 import { saveSettingsDebounced }                            from '../../../../script.js';
 import { eventSource, event_types }           from '../../../../script.js';
 import { log, error, setVerbose }             from './log.js';
@@ -77,16 +77,12 @@ function _initSettings() {
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
-jQuery(async () => {
+jQuery(() => {
     _initSettings();
     initProfileManager();
 
     // Inject the extensions drawer entry
-    const settingsHtml = await renderExtensionTemplateAsync(
-        `third-party/${CTZ_EXT_NAME}`,
-        'settings_display',
-    ).catch(() => _buildFallbackSettingsHtml());
-    $('#extensions_settings').append(settingsHtml);
+    $('#extensions_settings').append(_buildFallbackSettingsHtml());
 
     _wireDrawerButtons();
     log(TAG, 'Extension loaded');
