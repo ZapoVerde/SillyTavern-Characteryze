@@ -186,17 +186,23 @@ async function _onChatLoaded() {
  * Idempotently ensures the default Forge profile exists.
  */
 export async function ensureForgeProfile() {
-    const cm = extension_settings['connection-manager'];
-    const profiles = cm?.profiles ?? {};
-    
-    const exists = Array.isArray(profiles)
-        ? profiles.some(p => p === CTZ_FORGE_PROFILE_NAME || p.name === CTZ_FORGE_PROFILE_NAME)
-        : (profiles[CTZ_FORGE_PROFILE_NAME] !== undefined || Object.prototype.hasOwnProperty.call(profiles, CTZ_FORGE_PROFILE_NAME));
+    const cm       = SillyTavern.getContext().extensionSettings.connectionManager;
+    const profiles = cm?.profiles ?? [];
+    const exists   = profiles.some(p => p.name === CTZ_FORGE_PROFILE_NAME);
 
     if (!exists) {
+        // /profile-create also sets connectionManager.selectedProfile to the new
+        // profile's ID without emitting CONNECTION_PROFILE_LOADED. If we let that
+        // stand, _readActiveProfileName() would return 'Characteryze Forge' and
+        // enterForge's guard would incorrectly abort the launch. Restore the
+        // previous selectedProfile after creation so the read stays correct.
+        const previousSelectedId = cm?.selectedProfile ?? null;
+
         log(TAG, 'Creating default Forge profile:', CTZ_FORGE_PROFILE_NAME);
         const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
         await executeSlashCommandsWithOptions(`/profile-create ${CTZ_FORGE_PROFILE_NAME}`);
+
+        if (cm) cm.selectedProfile = previousSelectedId;
     }
 }
 
