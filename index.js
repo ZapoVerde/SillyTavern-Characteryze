@@ -28,7 +28,6 @@ import { log, error, setVerbose }             from './log.js';
 import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME, DEFAULT_SETTINGS }     from './defaults.js';
 import {
     initProfileManager,
-    ensureForgeProfile,
     enterForge,
     exitForge,
     setUiActive,
@@ -108,7 +107,6 @@ async function _onLaunch() {
             return;
         }
 
-        await ensureForgeProfile();
         pruneOldSessions();
 
         // Build tab bar once; subsequent launches reuse it

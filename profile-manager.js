@@ -39,7 +39,7 @@ import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types }                  from '../../../../script.js';
 import { log, warn, error }                          from './log.js';
-import { CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME } from './defaults.js';
+import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME } from './defaults.js';
 import { ConnectionManagerRequestService }           from '../../shared.js';
 
 const TAG = 'Profile';
@@ -185,30 +185,16 @@ async function _onChatLoaded() {
 /**
  * Idempotently ensures the default Forge profile exists.
  */
-export async function ensureForgeProfile() {
-    const cm       = SillyTavern.getContext().extensionSettings.connectionManager;
-    const profiles = cm?.profiles ?? [];
-    const exists   = profiles.some(p => p.name === CTZ_FORGE_PROFILE_NAME);
-
-    if (!exists) {
-        // /profile-create also sets connectionManager.selectedProfile to the new
-        // profile's ID without emitting CONNECTION_PROFILE_LOADED. If we let that
-        // stand, _readActiveProfileName() would return 'Characteryze Forge' and
-        // enterForge's guard would incorrectly abort the launch. Restore the
-        // previous selectedProfile after creation so the read stays correct.
-        const previousSelectedId = cm?.selectedProfile ?? null;
-
-        log(TAG, 'Creating default Forge profile:', CTZ_FORGE_PROFILE_NAME);
-        const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
-        await executeSlashCommandsWithOptions(`/profile-create ${CTZ_FORGE_PROFILE_NAME}`);
-
-        if (cm) cm.selectedProfile = previousSelectedId;
-    }
-}
-
 export async function enterForge() {
-    const settings = extension_settings[CTZ_EXT_NAME];
+    const settings   = extension_settings[CTZ_EXT_NAME];
     const targetName = _resolveTargetProfileName(settings);
+
+    if (!targetName) {
+        throw new Error(
+            'Characteryze: no Forge engine is configured. ' +
+            'Select a connection profile in CTZ Settings → Forge Engine.'
+        );
+    }
 
     // Prefer the event-updated cache; fall back to a direct settings read.
     const currentProfile = _lastKnownProfile ?? _readActiveProfileName();
@@ -221,13 +207,24 @@ export async function enterForge() {
     }
 
     if (currentProfile === targetName) {
-        // The Forge profile is already active — a previous session likely crashed.
-        // Proceeding would write the Forge profile as the permasave target,
-        // making restore impossible, so we abort instead.
-        throw new Error(
-            'Characteryze: the Forge profile is already the active connection. ' +
-            'Restore your original profile manually and try again.'
-        );
+        // Two distinct causes — handle them separately.
+        const existingPermasave = settings.permasave_profile;
+
+        if (existingPermasave && existingPermasave !== targetName) {
+            // Crash recovery: a previous session ended without restoring the
+            // profile. Auto-restore from the saved permasave and continue.
+            log(TAG, 'Forge profile left active from prior session — auto-restoring:', existingPermasave);
+            await _applyProfile(existingPermasave);
+            currentProfile = existingPermasave;
+        } else {
+            // Misconfiguration: forge_profile_id is set to the user's current
+            // profile, so there is no safe restore target.
+            throw new Error(
+                `Characteryze: the connection "${currentProfile}" is configured as both your ` +
+                `current profile and the Forge engine. ` +
+                `Select a different profile as the Forge engine in CTZ Settings.`
+            );
+        }
     }
 
     // ── Character capture ──────────────────────────────────────────────────────
@@ -313,7 +310,7 @@ function _resolveTargetProfileName(settings) {
             warn(TAG, 'Could not resolve profile name for ID:', selectedId);
         }
     }
-    return CTZ_FORGE_PROFILE_NAME;
+    return null;
 }
 
 async function _applyProfile(name) {
