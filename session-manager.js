@@ -40,10 +40,10 @@ import { log, warn, error }                           from './log.js';
 import {
     CTZ_EXT_NAME,
     CTZ_INTERNAL_CHAR_FILENAME,
+    INTERNAL_CHARACTER_CARD,
 } from './defaults.js';
 
-const TAG        = 'Session';
-const ASSET_PATH = '/scripts/extensions/third-party/characteryze/assets/internal_character.json';
+const TAG = 'Session';
 
 let _workspace = {
     filename:    null,
@@ -59,9 +59,7 @@ export async function ensureInternalCharacter() {
 
     log(TAG, 'Importing internal character for first-time setup');
     try {
-        const cardResp = await fetch(ASSET_PATH);
-        if (!cardResp.ok) throw new Error(`Asset fetch failed: ${cardResp.status}`);
-        const cardJson = await cardResp.text();
+        const cardJson = JSON.stringify(INTERNAL_CHARACTER_CARD);
 
         const formData = new FormData();
         formData.append(

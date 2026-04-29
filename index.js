@@ -80,10 +80,7 @@ function _initSettings() {
 jQuery(() => {
     _initSettings();
     initProfileManager();
-
-    // Inject the extensions drawer entry
-    $('#extensions_settings').append(_buildFallbackSettingsHtml());
-
+    _injectDrawer();
     _wireDrawerButtons();
     log(TAG, 'Extension loaded');
 });
@@ -148,24 +145,37 @@ function _mountPanels() {
     registerPanel('forge',     container => mountForge(container));
     registerPanel('workbench', container => mountWorkbench(container));
     registerPanel('portrait',  container => mountPortrait(container));
-    registerPanel('settings',  container => mountSettings(container));
+    registerPanel('settings',  container => mountSettings(container, 'ctz'));
 }
 
-// ─── Fallback settings HTML ───────────────────────────────────────────────────
+// ─── Drawer HTML + settings injection ────────────────────────────────────────
 
-function _buildFallbackSettingsHtml() {
-    return `
-        <div id="ctz-settings-block" class="extension-settings">
-            <div class="inline-drawer">
-                <div class="inline-drawer-toggle inline-drawer-header">
-                    <b>Characteryze</b>
-                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+function _injectDrawer() {
+    const wrapper = document.createElement('div');
+    wrapper.id        = 'ctz-settings-block';
+    wrapper.className = 'extension-settings';
+    wrapper.innerHTML = `
+        <div class="inline-drawer">
+            <div class="inline-drawer-toggle inline-drawer-header">
+                <b>Characteryze</b>
+                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+            </div>
+            <div class="inline-drawer-content">
+                <div style="display:flex;gap:6px;margin-bottom:10px;">
+                    <button id="ctz-launch-btn" class="menu_button">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Launch
+                    </button>
+                    <button id="ctz-close-btn" class="menu_button">
+                        <i class="fa-solid fa-right-from-bracket"></i> Close
+                    </button>
                 </div>
-                <div class="inline-drawer-content">
-                    <button id="ctz-launch-btn" class="menu_button">Launch</button>
-                    <button id="ctz-close-btn"  class="menu_button">Close</button>
-                </div>
+                <div id="ctz-drawer-settings"></div>
             </div>
         </div>
     `;
+    document.getElementById('extensions_settings')?.appendChild(wrapper);
+
+    // Mount settings panel into drawer with 'ctzd' prefix (drawer instance)
+    const drawerSlot = document.getElementById('ctz-drawer-settings');
+    if (drawerSlot) mountSettings(drawerSlot, 'ctzd');
 }

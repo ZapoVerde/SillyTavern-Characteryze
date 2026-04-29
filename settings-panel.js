@@ -30,15 +30,20 @@ const TAG = 'Settings';
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 
-export function mountPanel(container) {
-    container.innerHTML = _buildHTML();
-    _wire(container);
-    log(TAG, 'Mounted');
+/**
+ * @param {HTMLElement} container
+ * @param {string} [idPrefix='ctz'] — allows mounting two independent instances
+ *                                    (drawer + overlay) without ID collisions
+ */
+export function mountPanel(container, idPrefix = 'ctz') {
+    container.innerHTML = _buildHTML(idPrefix);
+    _wire(container, idPrefix);
+    log(TAG, 'Mounted', idPrefix);
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
-function _buildHTML() {
+function _buildHTML(p) {
     const s      = extension_settings[CTZ_EXT_NAME] ?? {};
     const ig     = s.image_gen   ?? {};
     const sess   = s.sessions    ?? {};
@@ -50,8 +55,8 @@ function _buildHTML() {
             <section class="ctz-section">
                 <h3 class="ctz-section-title">Image Generation</h3>
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="ctz-ig-engine">Engine</label>
-                    <select id="ctz-ig-engine" class="ctz-select">
+                    <label class="ctz-label" for="${p}-ig-engine">Engine</label>
+                    <select id="${p}-ig-engine" class="ctz-select">
                         <option value="pollinations" ${engine === 'pollinations' ? 'selected' : ''}>
                             Pollinations (built-in)
                         </option>
@@ -60,16 +65,16 @@ function _buildHTML() {
                         </option>
                     </select>
                 </div>
-                <div class="ctz-form-row" id="ctz-ig-endpoint-row"
+                <div class="ctz-form-row" id="${p}-ig-endpoint-row"
                      style="${engine !== 'custom' ? 'display:none' : ''}">
-                    <label class="ctz-label" for="ctz-ig-endpoint">Endpoint URL</label>
-                    <input id="ctz-ig-endpoint" class="ctz-input"
+                    <label class="ctz-label" for="${p}-ig-endpoint">Endpoint URL</label>
+                    <input id="${p}-ig-endpoint" class="ctz-input"
                            value="${_esc(ig.endpoint ?? '')}"
                            placeholder="https://…" />
                 </div>
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="ctz-ig-template">Prompt Template</label>
-                    <textarea id="ctz-ig-template" class="ctz-input ctz-textarea"
+                    <label class="ctz-label" for="${p}-ig-template">Prompt Template</label>
+                    <textarea id="${p}-ig-template" class="ctz-input ctz-textarea"
                               rows="3">${_esc(tmpl)}</textarea>
                     <small class="ctz-hint">Use <code>{{prompt}}</code> as placeholder.</small>
                 </div>
@@ -78,13 +83,13 @@ function _buildHTML() {
             <section class="ctz-section">
                 <h3 class="ctz-section-title">Sessions</h3>
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="ctz-autosave">Autosave</label>
-                    <input type="checkbox" id="ctz-autosave" class="ctz-checkbox"
+                    <label class="ctz-label" for="${p}-autosave">Autosave</label>
+                    <input type="checkbox" id="${p}-autosave" class="ctz-checkbox"
                            ${sess.autosave !== false ? 'checked' : ''} />
                 </div>
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="ctz-max-saved">Max saved sessions</label>
-                    <input type="number" id="ctz-max-saved" class="ctz-input ctz-input-sm"
+                    <label class="ctz-label" for="${p}-max-saved">Max saved sessions</label>
+                    <input type="number" id="${p}-max-saved" class="ctz-input ctz-input-sm"
                            value="${sess.max_saved ?? 50}" min="1" max="500" />
                 </div>
             </section>
@@ -92,8 +97,8 @@ function _buildHTML() {
             <section class="ctz-section">
                 <h3 class="ctz-section-title">Diagnostics</h3>
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="ctz-verbose">Verbose logging</label>
-                    <input type="checkbox" id="ctz-verbose" class="ctz-checkbox"
+                    <label class="ctz-label" for="${p}-verbose">Verbose logging</label>
+                    <input type="checkbox" id="${p}-verbose" class="ctz-checkbox"
                            ${isVerbose() ? 'checked' : ''} />
                 </div>
             </section>
@@ -102,8 +107,8 @@ function _buildHTML() {
                 <h3 class="ctz-section-title">Forge Profile</h3>
                 <div class="ctz-form-row">
                     <label class="ctz-label">Permasave (restore target)</label>
-                    <span class="ctz-muted" id="ctz-permasave-display">
-                        ${_esc(extension_settings[CTZ_EXT_NAME]?.permasave_profile ?? '—')}
+                    <span class="ctz-muted">
+                        ${_esc(s.permasave_profile ?? '—')}
                     </span>
                 </div>
             </section>
@@ -113,16 +118,16 @@ function _buildHTML() {
 
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
-function _wire(container) {
+function _wire(container, p) {
     const s = () => extension_settings[CTZ_EXT_NAME];
 
-    const engineSel   = container.querySelector('#ctz-ig-engine');
-    const endpointRow = container.querySelector('#ctz-ig-endpoint-row');
-    const endpointIn  = container.querySelector('#ctz-ig-endpoint');
-    const templateTA  = container.querySelector('#ctz-ig-template');
-    const autosaveCb  = container.querySelector('#ctz-autosave');
-    const maxSavedIn  = container.querySelector('#ctz-max-saved');
-    const verboseCb   = container.querySelector('#ctz-verbose');
+    const engineSel   = container.querySelector(`#${p}-ig-engine`);
+    const endpointRow = container.querySelector(`#${p}-ig-endpoint-row`);
+    const endpointIn  = container.querySelector(`#${p}-ig-endpoint`);
+    const templateTA  = container.querySelector(`#${p}-ig-template`);
+    const autosaveCb  = container.querySelector(`#${p}-autosave`);
+    const maxSavedIn  = container.querySelector(`#${p}-max-saved`);
+    const verboseCb   = container.querySelector(`#${p}-verbose`);
 
     engineSel?.addEventListener('change', () => {
         const isCustom = engineSel.value === 'custom';

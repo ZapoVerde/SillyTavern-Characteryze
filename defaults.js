@@ -62,6 +62,30 @@ export const FIELD_MAPS = Object.freeze({
     ],
 });
 
+/**
+ * Minimal V2 character card used as the internal Forge session host.
+ * Inlined to avoid a runtime HTTP fetch for the asset file.
+ */
+export const INTERNAL_CHARACTER_CARD = Object.freeze({
+    spec:         'chara_card_v2',
+    spec_version: '2.0',
+    data: Object.freeze({
+        name:                    'Characteryze',
+        description:             '',
+        personality:             '',
+        scenario:                '',
+        first_mes:               '',
+        mes_example:             '',
+        creator_notes:           'Internal Characteryze session host. Do not modify or chat with this character directly.',
+        system_prompt:           '',
+        post_history_instructions: '',
+        tags:                    [],
+        creator:                 'Characteryze',
+        character_version:       '1.0',
+        extensions: Object.freeze({ characteryze_internal: true }),
+    }),
+});
+
 export const POLLINATIONS_BASE_URL = 'https://image.pollinations.ai';
 export const POLLINATIONS_APP_KEY  = 'characteryze';
 
