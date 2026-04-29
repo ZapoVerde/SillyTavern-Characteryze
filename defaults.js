@@ -1,12 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-04-29T10:15:00.000Z"}
- * @version 1.1.0
+ * @stamp {"utc":"2026-04-29T10:45:00.000Z"}
+ * @version 1.2.0
  * @architectural-role Pure — Static Configuration
  * @description
  * Seed constants for Characteryze. Defines the naming convention for the 
- * user-created Host character used for session isolation. This file holds 
- * static shapes and default values; nothing here is mutated at runtime.
+ * user-created Host character and holds the schema for extension settings,
+ * including the Forge Engine profile selector.
  *
  * @api-declaration
  * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
@@ -75,6 +75,7 @@ export const DEFAULT_PORTRAIT_PROMPT_TEMPLATE =
 export const DEFAULT_SETTINGS = Object.freeze({
     permasave_profile:  null,
     forge_profile_name: CTZ_FORGE_PROFILE_NAME,
+    forge_profile_id:   null,     // ID of the profile selected via Connection Manager
     ui_active:          false,
     known_sessions:     [],       // [{ filename, canvas_type, session_name, created_at }]
     draft_states:       {},       // keyed by chat filename

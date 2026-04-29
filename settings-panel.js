@@ -1,12 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/settings-panel.js
- * @stamp {"utc":"2026-04-29T10:25:00.000Z"}
- * @version 1.1.0
+ * @stamp {"utc":"2026-04-29T10:50:00.000Z"}
+ * @version 1.2.0
  * @architectural-role IO — Settings Panel UI
  * @description
  * Renders the Settings tab. Includes configuration for image generation,
- * session limits, and diagnostics. Now features a prominent Setup section 
- * instructing the user to create the mandatory Host character.
+ * session limits, and diagnostics. Features a "Forge Engine" selector 
+ * powered by the SillyTavern Connection Manager.
  *
  * All writes go directly to extension_settings.characteryze via the standard
  * saveSettingsDebounced pathway. No state is held here.
@@ -18,7 +18,7 @@
  *   assertions:
  *     purity: IO
  *     state_ownership: []
- *     external_io: [DOM, extension_settings write, saveSettingsDebounced, setVerbose]
+ *     external_io: [DOM, extension_settings write, saveSettingsDebounced, setVerbose, ConnectionManagerRequestService]
  */
 
 import { extension_settings }    from '../../../extensions.js';
@@ -26,6 +26,7 @@ import { saveSettingsDebounced } from '../../../../script.js';
 import { log }                                        from './log.js';
 import { setVerbose, isVerbose }                      from './log.js';
 import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME, DEFAULT_PORTRAIT_PROMPT_TEMPLATE } from './defaults.js';
+import { ConnectionManagerRequestService } from '../../shared.js';
 
 const TAG = 'Settings';
 
@@ -119,7 +120,11 @@ function _buildHTML(p) {
             </section>
 
             <section class="ctz-section">
-                <h3 class="ctz-section-title">Forge Profile</h3>
+                <h3 class="ctz-section-title">Forge Engine</h3>
+                <div class="ctz-form-row">
+                    <label class="ctz-label" for="${p}-forge-engine">Active Engine</label>
+                    <select id="${p}-forge-engine" class="ctz-select"></select>
+                </div>
                 <div class="ctz-form-row">
                     <label class="ctz-label">Permasave (restore target)</label>
                     <span class="ctz-muted">
@@ -180,6 +185,22 @@ function _wire(container, p) {
         saveSettingsDebounced();
         log(TAG, 'Verbose mode:', verboseCb.checked);
     });
+
+    // Forge Engine Selector
+    const engineSelectorId = `#${p}-forge-engine`;
+    try {
+        ConnectionManagerRequestService.handleDropdown(
+            engineSelectorId,
+            s().forge_profile_id ?? '',
+            (profile) => {
+                s().forge_profile_id = profile?.id ?? null;
+                saveSettingsDebounced();
+                log(TAG, 'Forge Engine updated:', profile?.name);
+            },
+        );
+    } catch (err) {
+        log(TAG, 'ConnectionManager failure:', err);
+    }
 }
 
 function _esc(str) {
