@@ -160,15 +160,21 @@ function _commitRuleset(rulesetName, draft) {
     const existing = prompts.find(p => p.name === rulesetName);
 
     if (existing) {
+        log(TAG, 'Ruleset commit: updating existing entry', { identifier: existing.identifier, name: rulesetName, draft });
         if (draft.name)    existing.name    = draft.name;
         if (draft.content) existing.content = draft.content;
     } else {
-        const id = `ctz_ruleset_${Date.now()}`;
-        promptManager.addPrompt(
-            { identifier: id, name: draft.name ?? rulesetName, content: draft.content ?? '', role: 'system', enabled: true },
-            id,
-        );
+        const id      = `ctz_ruleset_${Date.now()}`;
+        const payload = { identifier: id, name: draft.name ?? rulesetName, content: draft.content ?? '', role: 'system', enabled: true };
+        log(TAG, 'Ruleset commit: creating new entry', payload);
+        promptManager.addPrompt(payload, id);
     }
+
     promptManager.saveServiceSettings();
-    log(TAG, 'Ruleset committed:', rulesetName);
+
+    // Verify what is now in serviceSettings so we can confirm the save landed
+    const allAfter = promptManager.serviceSettings?.prompts ?? [];
+    log(TAG, `Rulesets in serviceSettings after save (${allAfter.length} total):`,
+        allAfter.map(p => `[${p.identifier}] ${p.name}`)
+    );
 }
