@@ -1,19 +1,17 @@
 /**
  * @file data/default-user/extensions/characteryze/session-manager.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T10:30:00.000Z"}
+ * @version 1.1.1
  * @architectural-role Stateful — Forge Session Lifecycle
  * @description
  * Owns the active workspace object and the known_sessions index. Handles
- * first-load internal character creation, new session creation, session
- * loading, and draft state persistence.
+ * session creation, loading, and draft state persistence.
  *
- * Sessions are indexed in extension_settings.characteryze.known_sessions by
- * chat filename. Draft state for each session persists in draft_states[filename]
- * so it survives browser refreshes without committing to ST's native files.
+ * Isolation is achieved by hosting all Forge sessions under a specific 
+ * character defined by CTZ_HOST_CHAR_NAME. This character must be created 
+ * manually by the user.
  *
  * @api-declaration
- * ensureInternalCharacter()             — import character asset on first run (idempotent)
  * newForgeSession(canvasType, name?)    — create new chat, record session; returns entry
  * loadForgeSession(filename)            — open existing session chat
  * listSessions()                        — returns known_sessions array (copy)
@@ -29,18 +27,17 @@
  *   assertions:
  *     purity: Stateful / IO
  *     state_ownership: [_workspace]
- *     external_io: [fetch /api/characters/import, SillyTavern context,
- *                   extension_settings write, saveSettingsDebounced, toastr]
+ *     external_io: [SillyTavern context, extension_settings write, 
+ *                   saveSettingsDebounced, toastr]
  */
 
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types, doNewChat }        from '../../../../script.js';
-import { log, warn, error }                           from './log.js';
+import { log, error }                                 from './log.js';
 import {
     CTZ_EXT_NAME,
-    CTZ_INTERNAL_CHAR_FILENAME,
-    INTERNAL_CHARACTER_CARD,
+    CTZ_HOST_CHAR_NAME,
 } from './defaults.js';
 
 const TAG = 'Session';
@@ -51,54 +48,21 @@ let _workspace = {
     target:      null,
 };
 
-// ─── Internal character ───────────────────────────────────────────────────────
-
-export async function ensureInternalCharacter() {
-    const ctx = SillyTavern.getContext();
-    if (ctx.characters.some(c => c.avatar === CTZ_INTERNAL_CHAR_FILENAME)) return;
-
-    log(TAG, 'Importing internal character for first-time setup');
-    try {
-        const cardJson = JSON.stringify(INTERNAL_CHARACTER_CARD);
-
-        const formData = new FormData();
-        formData.append(
-            'char_import_file',
-            new Blob([cardJson], { type: 'application/json' }),
-            'characteryze_internal.json',
-        );
-        formData.append('preserved_name', CTZ_INTERNAL_CHAR_FILENAME);
-
-        const importResp = await fetch('/api/characters/import', {
-            method:  'POST',
-            headers: ctx.getRequestHeaders(),
-            body:    formData,
-        });
-        if (!importResp.ok) throw new Error(`Import failed: ${importResp.status}`);
-
-        log(TAG, 'Internal character imported');
-        toastr.info(
-            'Characteryze: first-time setup complete. Please click Launch again.',
-            '',
-            { timeOut: 6000 },
-        );
-        // Signal to caller that a page-state reload is needed
-        return 'needs_reload';
-    } catch (err) {
-        error(TAG, 'ensureInternalCharacter failed', err);
-        throw err;
-    }
-}
-
 // ─── Session lifecycle ────────────────────────────────────────────────────────
 
+/**
+ * Creates a new chat session for the Forge.
+ * Requires the Host character to exist in the user's roster.
+ */
 export async function newForgeSession(canvasType, sessionName = null) {
     const charIdx = _findInternalCharIdx();
-    if (charIdx === -1) throw new Error('Internal character not found');
+    if (charIdx === -1) {
+        throw new Error(`Host character "${CTZ_HOST_CHAR_NAME}" not found.`);
+    }
 
     const ctx = SillyTavern.getContext();
 
-    // Switch to internal character (triggers CHAT_LOADED for its last chat)
+    // Switch to host character (triggers CHAT_LOADED for its last chat)
     await _selectCharAndWait(ctx, charIdx);
 
     // Create a new chat for that character
@@ -119,9 +83,14 @@ export async function newForgeSession(canvasType, sessionName = null) {
     return entry;
 }
 
+/**
+ * Loads an existing Forge session chat.
+ */
 export async function loadForgeSession(filename) {
     const charIdx = _findInternalCharIdx();
-    if (charIdx === -1) throw new Error('Internal character not found');
+    if (charIdx === -1) {
+        throw new Error(`Host character "${CTZ_HOST_CHAR_NAME}" not found.`);
+    }
 
     const ctx = SillyTavern.getContext();
 
@@ -194,7 +163,7 @@ export function clearDraftState(filename) {
 
 function _findInternalCharIdx() {
     return SillyTavern.getContext().characters
-        .findIndex(c => c.avatar === CTZ_INTERNAL_CHAR_FILENAME);
+        .findIndex(c => c.name === CTZ_HOST_CHAR_NAME);
 }
 
 function _selectCharAndWait(ctx, charIdx) {
