@@ -96,6 +96,53 @@ function _readActiveProfileName() {
     }
 }
 
+function _readActiveCharacterName() {
+    try {
+        const ctx = SillyTavern.getContext();
+        const idx = ctx.characterId;
+        if (idx == null || idx < 0) return null;
+        return ctx.characters[idx]?.name ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function _readActiveCharacterChat() {
+    try {
+        const ctx = SillyTavern.getContext();
+        const idx = ctx.characterId;
+        if (idx == null || idx < 0) return null;
+        return ctx.characters[idx]?.chat ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Selects the saved character by name and reopens the saved chat file.
+ * Falls back to the loading screen if the character is no longer in the roster.
+ */
+async function _restoreCharacter(name, chatFilename) {
+    const ctx = SillyTavern.getContext();
+    const idx = ctx.characters.findIndex(c => c.name === name);
+    if (idx < 0) {
+        warn(TAG, 'exitForge: saved character not found:', name, '— falling back to loading screen');
+        _popToLoadingScreen();
+        return;
+    }
+    await new Promise(resolve => {
+        eventSource.once(event_types.CHAT_LOADED, resolve);
+        ctx.selectCharacterById(idx);
+    });
+    if (chatFilename) {
+        await new Promise(resolve => {
+            eventSource.once(event_types.CHAT_LOADED, resolve);
+            ctx.openCharacterChat(chatFilename);
+        });
+    }
+    log(TAG, 'Character restored:', name, chatFilename ?? '(last chat)');
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 export function initProfileManager() {
@@ -177,9 +224,29 @@ export async function enterForge() {
         );
     }
 
-    settings.permasave_profile = currentProfile;
+    // ── Character capture ──────────────────────────────────────────────────────
+    const currentCharacter = _readActiveCharacterName();
+    const currentChat      = _readActiveCharacterChat();
+
+    if (!currentCharacter) {
+        throw new Error(
+            'Characteryze: no character is currently active. ' +
+            'Select a character and try again.'
+        );
+    }
+
+    if (currentCharacter === CTZ_HOST_CHAR_NAME) {
+        throw new Error(
+            'Characteryze: the Host character is already active. ' +
+            'Switch to your original character first.'
+        );
+    }
+
+    settings.permasave_profile   = currentProfile;
+    settings.permasave_character = currentCharacter;
+    settings.permasave_chat      = currentChat;
     saveSettingsDebounced();
-    log(TAG, 'Permasave written:', currentProfile);
+    log(TAG, 'Permasave written — profile:', currentProfile, '| character:', currentCharacter, '| chat:', currentChat ?? '(none)');
 
     _uiActive = true;
     _suppressExternalListeners();
@@ -195,7 +262,10 @@ export async function exitForge() {
     // Keep _uiActive true while the profile swap is in progress so that any
     // CHAT_LOADED events fired by the switch do not trigger the rogue-profile
     // guard before the restore has completed.
-    const permasave = extension_settings[CTZ_EXT_NAME]?.permasave_profile;
+    const settings        = extension_settings[CTZ_EXT_NAME];
+    const permasave       = settings?.permasave_profile;
+    const permasaveChar   = settings?.permasave_character ?? null;
+    const permasaveChat   = settings?.permasave_chat      ?? null;
 
     try {
         if (permasave) {
@@ -208,7 +278,12 @@ export async function exitForge() {
         _restoreExternalListeners();
     }
 
-    _popToLoadingScreen();
+    if (permasaveChar) {
+        await _restoreCharacter(permasaveChar, permasaveChat);
+    } else {
+        warn(TAG, 'exitForge: no permasave character — popping to loading screen');
+        _popToLoadingScreen();
+    }
 }
 
 export function setUiActive(active) {
