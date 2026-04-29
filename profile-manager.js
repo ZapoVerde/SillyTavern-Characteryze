@@ -77,6 +77,25 @@ function _restoreExternalListeners() {
     log(TAG, 'External listeners restored');
 }
 
+/**
+ * Proactively reads the active connection profile name directly from the
+ * connection-manager's persisted state. Used as a fallback when the
+ * CONNECTION_PROFILE_LOADED event has not fired since page load.
+ * Returns null if the state is unavailable or no profile is selected.
+ */
+function _readActiveProfileName() {
+    try {
+        const cm = SillyTavern.getContext().extensionSettings.connectionManager;
+        if (!cm) return null;
+        const selectedId = cm.selectedProfile;
+        if (!selectedId) return null;
+        const profile = cm.profiles?.find(p => p.id === selectedId);
+        return profile?.name ?? null;
+    } catch {
+        return null;
+    }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 export function initProfileManager() {
@@ -138,11 +157,29 @@ export async function enterForge() {
     const settings = extension_settings[CTZ_EXT_NAME];
     const targetName = _resolveTargetProfileName(settings);
 
-    if (_lastKnownProfile && _lastKnownProfile !== targetName) {
-        settings.permasave_profile = _lastKnownProfile;
-        saveSettingsDebounced();
-        log(TAG, 'Permasave written:', _lastKnownProfile);
+    // Prefer the event-updated cache; fall back to a direct settings read.
+    const currentProfile = _lastKnownProfile ?? _readActiveProfileName();
+
+    if (!currentProfile) {
+        throw new Error(
+            'Characteryze: current connection profile is unknown. ' +
+            'Load a connection profile and try again.'
+        );
     }
+
+    if (currentProfile === targetName) {
+        // The Forge profile is already active — a previous session likely crashed.
+        // Proceeding would write the Forge profile as the permasave target,
+        // making restore impossible, so we abort instead.
+        throw new Error(
+            'Characteryze: the Forge profile is already the active connection. ' +
+            'Restore your original profile manually and try again.'
+        );
+    }
+
+    settings.permasave_profile = currentProfile;
+    saveSettingsDebounced();
+    log(TAG, 'Permasave written:', currentProfile);
 
     _uiActive = true;
     _suppressExternalListeners();
@@ -155,7 +192,9 @@ export async function enterForge() {
 }
 
 export async function exitForge() {
-    _uiActive = false;
+    // Keep _uiActive true while the profile swap is in progress so that any
+    // CHAT_LOADED events fired by the switch do not trigger the rogue-profile
+    // guard before the restore has completed.
     const permasave = extension_settings[CTZ_EXT_NAME]?.permasave_profile;
 
     try {
@@ -165,6 +204,7 @@ export async function exitForge() {
             warn(TAG, 'exitForge: no permasave — profile not restored');
         }
     } finally {
+        _uiActive = false;
         _restoreExternalListeners();
     }
 

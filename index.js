@@ -133,10 +133,12 @@ async function _onClose() {
     log(TAG, 'Close');
     try {
         hideOverlay();
-        setUiActive(false);
         await exitForge();
     } catch (err) {
         error(TAG, 'Close sequence error', err);
+        // exitForge sets _uiActive false in its finally block, but if it
+        // throws before reaching that point, clear the flag here as a fallback.
+        setUiActive(false);
     }
 }
 
