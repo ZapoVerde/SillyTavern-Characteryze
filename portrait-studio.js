@@ -23,7 +23,7 @@
  */
 
 import { error, log }  from './log.js';
-import { findSecret }  from '../../../../secrets.js';
+import { findSecret }  from '../../../secrets.js';
 import {
     POLLINATIONS_BASE_URL,
     POLLINATIONS_APP_KEY,
