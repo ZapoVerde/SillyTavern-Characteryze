@@ -1,12 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/portrait-studio.js
- * @stamp {"utc":"2026-04-29T11:05:00.000Z"}
- * @version 1.2.0
+ * @stamp {"utc":"2026-04-29T11:40:00.000Z"}
+ * @version 1.3.0
  * @architectural-role IO — Portrait Image Generation
  * @description
  * Authenticated image generation for character portraits via Pollinations.
- * Integrated with the SillyTavern Secret Vault. Handles URL construction 
- * with support for devMode (low-res) and full-res generation.
+ * Pathing and parameterization aligned with Vistalyze to ensure 404-free
+ * communication with gen.pollinations.ai.
  *
  * @api-declaration
  * buildPortraitUrl(prompt, settings, devMode) — pure; returns Pollinations fetch URL
@@ -38,7 +38,7 @@ const TAG = 'Portrait';
 // ─── Pure: URL builder ────────────────────────────────────────────────────────
 
 /**
- * Constructs the Pollinations API URL.
+ * Constructs the Pollinations API URL using the /image/ gateway.
  * @param {string} promptText — raw portrait prompt text
  * @param {object} settings   — image_gen settings object
  * @param {boolean} devMode   — if true, generates low-res preview
@@ -48,15 +48,16 @@ export function buildPortraitUrl(promptText, settings = {}, devMode = false) {
     const fullPrompt = template.replace('{{prompt}}', promptText);
     
     const params = new URLSearchParams({
-        width:  devMode ? String(DEV_IMAGE_WIDTH)  : '1024',
-        height: devMode ? String(DEV_IMAGE_HEIGHT) : '1024',
-        model:  'flux',
-        nologo: 'true',
-        enhance: 'true',
-        app:    POLLINATIONS_APP_KEY,
+        width:    devMode ? String(DEV_IMAGE_WIDTH)  : '1024',
+        height:   devMode ? String(DEV_IMAGE_HEIGHT) : '1024',
+        model:    settings.model ?? 'flux',
+        nologo:   'true',
+        enhance:  'true',
+        referrer: POLLINATIONS_APP_KEY,
     });
 
-    return `${POLLINATIONS_BASE_URL}/prompt/${encodeURIComponent(fullPrompt)}?${params.toString()}`;
+    // gen.pollinations.ai requires the /image/ path to handle these parameters correctly
+    return `${POLLINATIONS_BASE_URL}/image/${encodeURIComponent(fullPrompt)}?${params.toString()}`;
 }
 
 // ─── IO: Vault & Fetch ────────────────────────────────────────────────────────

@@ -1,11 +1,11 @@
 /**
  * @file data/default-user/extensions/characteryze/settings-panel.js
- * @stamp {"utc":"2026-04-29T11:20:00.000Z"}
- * @version 1.3.1
+ * @stamp {"utc":"2026-04-29T11:45:00.000Z"}
+ * @version 1.4.0
  * @architectural-role IO — Settings Panel UI
  * @description
- * Renders the Settings tab. Manages image generation configuration, including 
- * secure API key storage in the SillyTavern Secret Vault, connection testing,
+ * Renders the Settings tab. Manages image generation configuration (model selection,
+ * prompt templates, and secure API vault storage), connection testing,
  * and LLM engine selection via the Connection Manager.
  *
  * @api-declaration
@@ -29,6 +29,7 @@ import {
     CTZ_EXT_NAME, 
     CTZ_HOST_CHAR_NAME, 
     POLLINATIONS_SECRET_KEY_NAME,
+    POLLINATIONS_MODELS,
     DEFAULT_PORTRAIT_PROMPT_TEMPLATE 
 } from './defaults.js';
 import { ConnectionManagerRequestService } from '../../shared.js';
@@ -55,8 +56,12 @@ function _buildHTML(p) {
     const s      = extension_settings[CTZ_EXT_NAME] ?? {};
     const ig     = s.image_gen   ?? {};
     const sess   = s.sessions    ?? {};
-    const engine = ig.engine     ?? 'pollinations';
     const tmpl   = ig.prompt_template ?? DEFAULT_PORTRAIT_PROMPT_TEMPLATE;
+    const currentModel = ig.model ?? 'flux';
+
+    const modelOptions = POLLINATIONS_MODELS.map(m => 
+        `<option value="${_esc(m)}" ${m === currentModel ? 'selected' : ''}>${_esc(m)}</option>`
+    ).join('');
 
     return `
         <div class="ctz-settings-panel">
@@ -89,6 +94,13 @@ function _buildHTML(p) {
                     <label class="ctz-label">Diagnostics</label>
                     <button id="${p}-test-connection" class="ctz-btn ctz-btn-sm">Test Connection</button>
                     <span id="${p}-test-status" class="ctz-hint"></span>
+                </div>
+
+                <div class="ctz-form-row">
+                    <label class="ctz-label" for="${p}-image-model">Image Model</label>
+                    <select id="${p}-image-model" class="ctz-select">
+                        ${modelOptions}
+                    </select>
                 </div>
 
                 <div class="ctz-form-row">
@@ -147,6 +159,12 @@ function _wire(container, p) {
     container.querySelector(`#${p}-ig-template`)?.addEventListener('input', (e) => {
         s().image_gen.prompt_template = e.target.value;
         saveSettingsDebounced();
+    });
+
+    container.querySelector(`#${p}-image-model`)?.addEventListener('change', (e) => {
+        s().image_gen.model = e.target.value;
+        saveSettingsDebounced();
+        log(TAG, 'Image model updated:', e.target.value);
     });
 
     container.querySelector(`#${p}-dev-mode`)?.addEventListener('change', (e) => {

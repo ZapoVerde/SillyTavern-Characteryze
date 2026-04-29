@@ -1,19 +1,18 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-04-29T11:00:00.000Z"}
- * @version 1.3.0
+ * @stamp {"utc":"2026-04-29T11:30:00.000Z"}
+ * @version 1.4.0
  * @architectural-role Pure — Static Configuration
  * @description
- * Seed constants for Characteryze. Defines the naming convention for the 
- * user-created Host character and the schema for extension settings.
- * Updated to support the authenticated Pollinations API (gen.pollinations.ai)
- * and resolution-aware generation.
+ * Seed constants for Characteryze. Defines naming conventions, canvas schemas,
+ * and Pollinations API configuration. Aligned with Vistalyze for verified
+ * image generation pathways.
  *
  * @api-declaration
  * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
  * CANVAS_TYPES — enum of valid canvas type strings
  * FIELD_MAPS   — per-canvas ordered field descriptors
- * POLLINATIONS_BASE_URL, POLLINATIONS_APP_KEY, POLLINATIONS_SECRET_KEY_NAME
+ * POLLINATIONS_BASE_URL, POLLINATIONS_APP_KEY, POLLINATIONS_MODELS, POLLINATIONS_SECRET_KEY_NAME
  * DEV_IMAGE_WIDTH, DEV_IMAGE_HEIGHT
  * DEFAULT_SETTINGS — shape of extension_settings.characteryze on first init
  *
@@ -69,8 +68,19 @@ export const FIELD_MAPS = Object.freeze({
 
 /** Pollinations API Configuration (Aligned with Vistalyze) */
 export const POLLINATIONS_BASE_URL = 'https://gen.pollinations.ai';
-export const POLLINATIONS_APP_KEY  = 'characteryze';
+export const POLLINATIONS_APP_KEY  = 'pk_WfuLORZ5RZDfPRZU';
 export const POLLINATIONS_SECRET_KEY_NAME = 'api_key_pollinations';
+
+/** Available Pollinations image models */
+export const POLLINATIONS_MODELS = Object.freeze([
+    'flux',
+    'zimage',
+    'klein',
+    'gptimage',
+    'grok-imagine',
+    'seedream',
+    'qwen-image',
+]);
 
 /** Dev Mode Dimensions */
 export const DEV_IMAGE_WIDTH  = 320;
@@ -90,6 +100,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     draft_states:       {},       // keyed by chat filename
     image_gen: {
         engine:           'pollinations',
+        model:            'flux',
         endpoint:         '',
         prompt_template:  DEFAULT_PORTRAIT_PROMPT_TEMPLATE,
     },
