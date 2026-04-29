@@ -228,13 +228,6 @@ export async function enterForge() {
     const currentCharacter = _readActiveCharacterName();
     const currentChat      = _readActiveCharacterChat();
 
-    if (!currentCharacter) {
-        throw new Error(
-            'Characteryze: no character is currently active. ' +
-            'Select a character and try again.'
-        );
-    }
-
     if (currentCharacter === CTZ_HOST_CHAR_NAME) {
         throw new Error(
             'Characteryze: the Host character is already active. ' +
