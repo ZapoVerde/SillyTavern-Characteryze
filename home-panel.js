@@ -78,8 +78,12 @@ function _buildHTML() {
         `<option value="${_esc(c.avatar)}">${_esc(c.name)}</option>`,
     ).join('');
 
+    // ST built-in prompt identifiers are pure alphabetic/underscore strings (e.g.
+    // 'main', 'charDescription', 'world_info_before'). User-created prompts always
+    // have a digit in their identifier (timestamp or UUID). Filter on that.
     const rulesetOptions = promptManager
         ? (promptManager.serviceSettings?.prompts ?? [])
+            .filter(p => p.identifier && /\d/.test(p.identifier))
             .map(p => `<option value="${_esc(p.name)}">${_esc(p.name)}</option>`)
             .join('')
         : '';

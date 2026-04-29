@@ -35,11 +35,14 @@ import {
     getDraftState,
     setDraftField,
     clearDraftState,
+    setWorkspaceTarget,
 } from './session-manager.js';
 import { extension_settings }             from '../../../extensions.js';
-import { CTZ_EXT_NAME }                   from './defaults.js';
+import { CTZ_EXT_NAME, CANVAS_TYPES }     from './defaults.js';
 
 const TAG = 'Workbench';
+
+const DEFAULT_RULESET_NAME = 'New Ruleset';
 
 let _container   = null;
 let _previewUrl  = null;   // portrait preview object URL, if any
@@ -79,6 +82,10 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
                 <span class="ctz-block-preview">${_esc(b.content.slice(0, 60))}…</span>
             </div>`).join('')
         : '<p class="ctz-muted">No codeblocks in this session yet.</p>';
+
+    if (ws.canvas_type === CANVAS_TYPES.RULESET) {
+        return _buildRulesetHTML(ws, blocks, draft, dirtyKeys, blockItems);
+    }
 
     const fieldOptions = fields.map(f => {
         const dirty = dirtyKeys.includes(f.id);
@@ -129,9 +136,54 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
     `;
 }
 
+function _buildRulesetHTML(ws, _blocks, draft, dirtyKeys, blockItems) {
+    const isNew     = !ws.target || ws.target === DEFAULT_RULESET_NAME;
+    const nameValue = _esc(draft['name'] ?? (isNew ? '' : ws.target));
+    const liveText  = _esc(getLiveValue(CANVAS_TYPES.RULESET, 'content', ws.target) ?? '');
+    const draftText = _esc(draft['content'] ?? '');
+
+    return `
+        <div class="ctz-workbench">
+            <div class="ctz-wb-sidebar">
+                <h4 class="ctz-section-title">Blocks</h4>
+                <div class="ctz-block-list" id="ctz-block-list">${blockItems}</div>
+                <button id="ctz-wb-refresh-btn" class="ctz-btn ctz-btn-sm">↺ Refresh</button>
+            </div>
+
+            <div class="ctz-wb-main">
+                <div class="ctz-wb-toolbar">
+                    <input id="ctz-ruleset-name" class="ctz-input"
+                           value="${nameValue}" placeholder="Enter Name" />
+                    <button id="ctz-commit-btn" class="ctz-btn ctz-btn-primary"
+                            ${dirtyKeys.length === 0 ? 'disabled' : ''}>
+                        Commit (${dirtyKeys.length})
+                    </button>
+                </div>
+
+                <div class="ctz-diff-panes">
+                    <div class="ctz-pane ctz-pane-live">
+                        <div class="ctz-pane-header">Live State</div>
+                        <textarea class="ctz-pane-text" id="ctz-live-pane"
+                                  readonly>${liveText}</textarea>
+                    </div>
+                    <div class="ctz-pane ctz-pane-draft">
+                        <div class="ctz-pane-header">Draft</div>
+                        <textarea class="ctz-pane-text" id="ctz-draft-pane">${draftText}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
 function _wire(ws, blocks, fields) {
+    if (ws.canvas_type === CANVAS_TYPES.RULESET) {
+        _wireRuleset(ws, blocks);
+        return;
+    }
+
     const fieldSelect  = _container.querySelector('#ctz-field-select');
     const livePane     = _container.querySelector('#ctz-live-pane');
     const draftPane    = _container.querySelector('#ctz-draft-pane');
@@ -174,14 +226,14 @@ function _wire(ws, blocks, fields) {
             const draft      = getDraftState(ws.filename);
             const dirtyCount = Object.keys(draft).length;
             if (commitBtn) {
-                commitBtn.disabled   = dirtyCount === 0;
+                commitBtn.disabled    = dirtyCount === 0;
                 commitBtn.textContent = `Commit (${dirtyCount})`;
             }
             // Update dirty marker on the currently-selected option
             const opt = fieldSelect?.querySelector(`option[value="${CSS.escape(fieldId)}"]`);
             if (opt) {
-                opt.dataset.dirty   = '1';
-                opt.textContent     = opt.textContent.endsWith(' ●')
+                opt.dataset.dirty = '1';
+                opt.textContent   = opt.textContent.endsWith(' ●')
                     ? opt.textContent
                     : opt.textContent.trimEnd() + ' ●';
             }
@@ -226,6 +278,81 @@ function _wire(ws, blocks, fields) {
             toastr.error('Image generation failed.');
         }
     });
+}
+
+function _wireRuleset(ws, blocks) {
+    const nameInput  = _container.querySelector('#ctz-ruleset-name');
+    const draftPane  = _container.querySelector('#ctz-draft-pane');
+    const commitBtn  = _container.querySelector('#ctz-commit-btn');
+    const refreshBtn = _container.querySelector('#ctz-wb-refresh-btn');
+
+    // Block click → load content into draft pane
+    _container.querySelectorAll('.ctz-block-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const block = blocks.find(b => b.id === item.dataset.id);
+            if (block && draftPane) draftPane.value = block.content;
+        });
+    });
+
+    // Name input stages immediately (short field, no debounce needed)
+    nameInput?.addEventListener('input', () => {
+        if (!ws.filename) return;
+        setDraftField(ws.filename, 'name', nameInput.value.trim());
+        _refreshCommitBtn(commitBtn, ws.filename);
+        log(TAG, 'Staged ruleset name');
+    });
+
+    // Content draft pane: debounced staging
+    draftPane?.addEventListener('input', () => {
+        clearTimeout(_stageTimer);
+        if (!ws.filename) return;
+        _stageTimer = setTimeout(() => {
+            setDraftField(ws.filename, 'content', draftPane.value);
+            _refreshCommitBtn(commitBtn, ws.filename);
+            log(TAG, 'Auto-staged ruleset content');
+        }, 300);
+    });
+
+    refreshBtn?.addEventListener('click', () => { _render(); log(TAG, 'Blocks refreshed'); });
+
+    commitBtn?.addEventListener('click', async () => {
+        if (!ws.filename) return;
+
+        // Name validation — resolve from input → staged draft → workspace target
+        const draft      = getDraftState(ws.filename);
+        const resolvedName = (nameInput?.value.trim()) || draft['name'] || ws.target || '';
+
+        if (!resolvedName || resolvedName === DEFAULT_RULESET_NAME) {
+            toastr.warning('Enter a name for this ruleset before committing.');
+            nameInput?.focus();
+            return;
+        }
+
+        try {
+            // Ensure the staged name reflects what we validated
+            if (resolvedName !== draft['name']) {
+                setDraftField(ws.filename, 'name', resolvedName);
+            }
+            await _commitAll(ws, getDraftState(ws.filename));
+            // If the name changed, update the workspace target so live reads stay valid
+            if (resolvedName !== ws.target) {
+                setWorkspaceTarget(resolvedName);
+            }
+            clearDraftState(ws.filename);
+            toastr.success('Workbench committed.');
+            _render();
+        } catch (err) {
+            error(TAG, 'Commit failed', err);
+            toastr.error('Commit failed — see console.');
+        }
+    });
+}
+
+function _refreshCommitBtn(btn, filename) {
+    if (!btn) return;
+    const count = Object.keys(getDraftState(filename)).length;
+    btn.disabled      = count === 0;
+    btn.textContent   = `Commit (${count})`;
 }
 
 // ─── Commit dispatch ──────────────────────────────────────────────────────────
