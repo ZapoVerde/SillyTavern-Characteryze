@@ -38,6 +38,7 @@ const TABS = [
     { id: 'forge',     label: 'Forge'     },
     { id: 'workbench', label: 'Workbench' },
     { id: 'portrait',  label: 'Portrait'  },
+    { id: 'rulesets',  label: 'Rulesets'  },
     { id: 'settings',  label: 'Settings'  },
 ];
 

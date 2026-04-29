@@ -46,6 +46,7 @@ import { mountPanel as mountHome }      from './home-panel.js';
 import { mountPanel as mountForge }     from './forge-panel.js';
 import { mountPanel as mountWorkbench } from './workbench-panel.js';
 import { mountPanel as mountPortrait }  from './portrait-panel.js';
+import { mountPanel as mountRulesets }  from './rulesets-panel.js';
 import { mountPanel as mountSettings }  from './settings-panel.js';
 
 const TAG = 'Index';
@@ -153,6 +154,7 @@ function _mountPanels() {
     registerPanel('forge',     container => mountForge(container));
     registerPanel('workbench', container => mountWorkbench(container));
     registerPanel('portrait',  container => mountPortrait(container));
+    registerPanel('rulesets',  container => mountRulesets(container));
     registerPanel('settings',  container => mountSettings(container, 'ctz'));
 }
 
