@@ -1,7 +1,7 @@
 /**
  * @file data/default-user/extensions/characteryze/settings-panel.js
- * @stamp {"utc":"2026-04-29T11:10:00.000Z"}
- * @version 1.3.0
+ * @stamp {"utc":"2026-04-29T11:20:00.000Z"}
+ * @version 1.3.1
  * @architectural-role IO — Settings Panel UI
  * @description
  * Renders the Settings tab. Manages image generation configuration, including 
@@ -21,7 +21,7 @@
 
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
-import { writeSecret, secret_state } from '../../../../secrets.js';
+import { writeSecret, secret_state } from '../../../secrets.js';
 import { log, error }                                 from './log.js';
 import { setVerbose, isVerbose }                      from './log.js';
 import { generatePortrait, revokePreview }            from './portrait-studio.js';
@@ -31,7 +31,7 @@ import {
     POLLINATIONS_SECRET_KEY_NAME,
     DEFAULT_PORTRAIT_PROMPT_TEMPLATE 
 } from './defaults.js';
-import { ConnectionManagerRequestService } from '../../shared.js';
+import { ConnectionManagerRequestService } from '../../../../shared.js';
 
 const TAG = 'Settings';
 
