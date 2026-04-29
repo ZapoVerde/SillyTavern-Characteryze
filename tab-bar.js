@@ -112,15 +112,19 @@ function _buildOverlayHTML() {
         `<button class="ctz-tab-btn" data-tab="${t.id}">${t.label}</button>`,
     ).join('');
 
-    const panelSlots = TABS.map(t =>
-        `<div id="ctz-panel-${t.id}" class="ctz-panel ctz-hidden" data-panel="${t.id}"></div>`,
-    ).join('');
+    // Forge gets its own slot outside .ctz-panel-area so it remains visible
+    // in chat mode (when .ctz-panel-area is hidden by .ctz-chat-mode).
+    const panelSlots = TABS
+        .filter(t => t.id !== 'forge')
+        .map(t => `<div id="ctz-panel-${t.id}" class="ctz-panel ctz-hidden" data-panel="${t.id}"></div>`)
+        .join('');
 
     return `
         <div class="ctz-tab-bar">
             <div class="ctz-tabs">${tabBtns}</div>
             <button id="ctz-exit-btn" class="ctz-exit-btn" title="Exit Characteryze">✕</button>
         </div>
+        <div id="ctz-panel-forge" class="ctz-hidden"></div>
         <div class="ctz-panel-area">${panelSlots}</div>
     `;
 }
@@ -136,13 +140,16 @@ function _setActiveTab(tabId) {
         btn.classList.toggle('ctz-tab-active', btn.dataset.tab === tabId);
     });
 
-    // Show/hide panels; forge tab = chat mode (no panel)
+    // Show/hide regular panel slots (forge is not in .ctz-panel-area)
     document.querySelectorAll('.ctz-panel').forEach(panel => {
-        const isActive = panel.dataset.panel === tabId && tabId !== 'forge';
-        panel.classList.toggle('ctz-hidden', !isActive);
+        panel.classList.toggle('ctz-hidden', panel.dataset.panel !== tabId);
     });
 
-    // Overlay shrinks to tab-bar-only height in forge (chat) mode
+    // Forge strip slot lives outside .ctz-panel-area — toggle it separately
+    const forgeSlot = document.getElementById('ctz-panel-forge');
+    if (forgeSlot) forgeSlot.classList.toggle('ctz-hidden', tabId !== 'forge');
+
+    // Overlay shrinks to tab-bar + forge strip in forge (chat) mode
     const overlay = document.getElementById('ctz-overlay');
     if (overlay) {
         overlay.classList.toggle('ctz-chat-mode', tabId === 'forge');
