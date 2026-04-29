@@ -1,15 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/profile-manager.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T10:35:00.000Z"}
+ * @version 1.1.1
  * @architectural-role Stateful — Connection Profile Lifecycle
  * @description
  * Owns the Forge connection profile swap cycle. Manages permasave (the
  * authoritative restore target), swap-in on CTZ open, swap-out on CTZ exit,
- * first-load Forge profile creation, and the CHAT_LOADED rogue-profile guard.
- *
- * Navigation (loading screen pop) is triggered here as part of the exit
- * sequence. All slash-command execution delegates to getContext().
+ * and the CHAT_LOADED rogue-profile guard.
  *
  * @api-declaration
  * initProfileManager()   — register CONNECTION_PROFILE_LOADED + CHAT_LOADED listeners
@@ -50,7 +47,6 @@ export function initProfileManager() {
 // ─── Internal listeners ───────────────────────────────────────────────────────
 
 function _onProfileLoaded(payload) {
-    // Payload may be a profile-name string or an object with a .name property
     const name = typeof payload === 'string' ? payload : (payload?.name ?? null);
     if (name) {
         _lastKnownProfile = name;
@@ -75,19 +71,27 @@ async function _onChatLoaded() {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Idempotently ensures the Forge profile exists.
+ * Robust check against connection-manager settings to avoid duplicate toasts.
+ */
 export async function ensureForgeProfile() {
-    const cmProfiles = extension_settings['connection-manager']?.profiles ?? {};
-    const exists = Array.isArray(cmProfiles)
-        ? cmProfiles.some(p => p.name === CTZ_FORGE_PROFILE_NAME)
-        : Object.prototype.hasOwnProperty.call(cmProfiles, CTZ_FORGE_PROFILE_NAME);
+    if (_lastKnownProfile === CTZ_FORGE_PROFILE_NAME) return;
+
+    const cm = extension_settings['connection-manager'];
+    const profiles = cm?.profiles ?? {};
+    
+    // Support both object-based and array-based profile storage in ST
+    const exists = Array.isArray(profiles)
+        ? profiles.some(p => p === CTZ_FORGE_PROFILE_NAME || p.name === CTZ_FORGE_PROFILE_NAME)
+        : (profiles[CTZ_FORGE_PROFILE_NAME] !== undefined || Object.prototype.hasOwnProperty.call(profiles, CTZ_FORGE_PROFILE_NAME));
 
     if (!exists) {
         log(TAG, 'Creating Forge profile:', CTZ_FORGE_PROFILE_NAME);
         const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
         await executeSlashCommandsWithOptions(`/profile-create ${CTZ_FORGE_PROFILE_NAME}`);
-        log(TAG, 'Forge profile created');
     } else {
-        log(TAG, 'Forge profile already exists');
+        log(TAG, 'Forge profile verified');
     }
 }
 
