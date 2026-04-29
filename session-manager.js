@@ -43,7 +43,7 @@ import {
 } from './defaults.js';
 
 const TAG        = 'Session';
-const ASSET_PATH = './extensions/characteryze/assets/internal_character.json';
+const ASSET_PATH = '/scripts/extensions/third-party/characteryze/assets/internal_character.json';
 
 let _workspace = {
     filename:    null,
