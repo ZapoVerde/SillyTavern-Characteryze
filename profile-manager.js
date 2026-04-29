@@ -1,7 +1,7 @@
 /**
  * @file data/default-user/extensions/characteryze/profile-manager.js
- * @stamp {"utc":"2026-04-29T10:55:00.000Z"}
- * @version 1.2.0
+ * @stamp {"utc":"2026-04-29T11:30:00.000Z"}
+ * @version 1.3.0
  * @architectural-role Stateful — Connection Profile Lifecycle
  * @description
  * Owns the Forge connection profile swap cycle. Manages permasave (the
@@ -11,11 +11,17 @@
  * Resolves the target Forge profile name via ConnectionManagerRequestService
  * based on the saved forge_profile_id in extension settings.
  *
+ * During Forge sessions, external extension listeners for CHAT_CHANGED (and
+ * related events) are suppressed by swapping out their listener arrays on the
+ * shared eventSource. This prevents any loaded extension from reacting to
+ * character/chat navigation that occurs inside the Forge. Listeners are
+ * restored in full before the final pop-to-loading-screen on exit.
+ *
  * @api-declaration
  * initProfileManager()   — register CONNECTION_PROFILE_LOADED + CHAT_LOADED listeners
  * ensureForgeProfile()   — idempotently create default Forge profile if absent
- * enterForge()           — capture permasave, swap to selected Forge profile
- * exitForge()            — restore permasave, pop to loading screen
+ * enterForge()           — capture permasave, suppress external listeners, swap to Forge profile
+ * exitForge()            — restore permasave, restore external listeners, pop to loading screen
  * setUiActive(bool)      — set guard-exemption flag (called by index.js on launch/close)
  * isUiActive()           — returns current UI-active state
  * getPermasave()         — returns stored permasave profile name or null
@@ -23,10 +29,10 @@
  * @contract
  *   assertions:
  *     purity: Stateful / IO
- *     state_ownership: [_lastKnownProfile, _uiActive]
+ *     state_ownership: [_lastKnownProfile, _uiActive, _savedListeners]
  *     external_io: [executeSlashCommandsWithOptions, saveSettingsDebounced,
  *                   extension_settings write, DOM (#rm_button_characters),
- *                   ConnectionManagerRequestService]
+ *                   ConnectionManagerRequestService, eventSource.events (direct write)]
  */
 
 import { extension_settings }    from '../../../extensions.js';
@@ -40,6 +46,36 @@ const TAG = 'Profile';
 
 let _lastKnownProfile = null;
 let _uiActive         = false;
+
+// Events whose external listeners are silenced for the duration of a Forge session.
+// CHAT_CHANGED is the primary trigger consumed by all sibling extensions.
+// CHAT_LOADED is intentionally excluded — Characteryze's own session machinery
+// relies on it via eventSource.once() to sequence internal awaits.
+const _SUPPRESSED_EVENTS = [
+    event_types.CHAT_CHANGED,
+];
+
+// Stores the original listener arrays while suppression is active.
+// Keyed by event name; value is the array reference taken from eventSource.events.
+const _savedListeners = {};
+
+// ─── Listener suppression ─────────────────────────────────────────────────────
+
+function _suppressExternalListeners() {
+    for (const ev of _SUPPRESSED_EVENTS) {
+        _savedListeners[ev] = eventSource.events[ev] ?? [];
+        eventSource.events[ev] = [];
+    }
+    log(TAG, 'External listeners suppressed');
+}
+
+function _restoreExternalListeners() {
+    for (const ev of Object.keys(_savedListeners)) {
+        eventSource.events[ev] = _savedListeners[ev];
+        delete _savedListeners[ev];
+    }
+    log(TAG, 'External listeners restored');
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -109,17 +145,27 @@ export async function enterForge() {
     }
 
     _uiActive = true;
-    await _applyProfile(targetName);
+    _suppressExternalListeners();
+    try {
+        await _applyProfile(targetName);
+    } catch (err) {
+        _restoreExternalListeners();
+        throw err;
+    }
 }
 
 export async function exitForge() {
     _uiActive = false;
     const permasave = extension_settings[CTZ_EXT_NAME]?.permasave_profile;
 
-    if (permasave) {
-        await _applyProfile(permasave);
-    } else {
-        warn(TAG, 'exitForge: no permasave — profile not restored');
+    try {
+        if (permasave) {
+            await _applyProfile(permasave);
+        } else {
+            warn(TAG, 'exitForge: no permasave — profile not restored');
+        }
+    } finally {
+        _restoreExternalListeners();
     }
 
     _popToLoadingScreen();
