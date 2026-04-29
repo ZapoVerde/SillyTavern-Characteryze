@@ -31,7 +31,7 @@ import {
     POLLINATIONS_SECRET_KEY_NAME,
     DEFAULT_PORTRAIT_PROMPT_TEMPLATE 
 } from './defaults.js';
-import { ConnectionManagerRequestService } from '../../../../shared.js';
+import { ConnectionManagerRequestService } from '../../shared.js';
 
 const TAG = 'Settings';
 

@@ -34,7 +34,7 @@ import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types }                  from '../../../../script.js';
 import { log, warn, error }                          from './log.js';
 import { CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME }      from './defaults.js';
-import { ConnectionManagerRequestService }           from '../../../../shared.js';
+import { ConnectionManagerRequestService }           from '../../shared.js';
 
 const TAG = 'Profile';
 
