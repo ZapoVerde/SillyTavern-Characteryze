@@ -1,65 +1,106 @@
 /**
  * @file data/default-user/extensions/characteryze/portrait-studio.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T11:05:00.000Z"}
+ * @version 1.2.0
  * @architectural-role IO — Portrait Image Generation
  * @description
- * Self-contained image generation for character portraits. Does not use ST's
- * image generation UI or API surface — owns its own Pollinations connection.
- *
- * buildPortraitUrl() is pure. generatePortrait() fetches from Pollinations and
- * returns a local object URL for preview. commitPortrait() uploads the image as
- * the character's avatar via ST's native character edit endpoint.
- *
- * Operates on the "portrait" field of the CHARACTER_CARD canvas type.
+ * Authenticated image generation for character portraits via Pollinations.
+ * Integrated with the SillyTavern Secret Vault. Handles URL construction 
+ * with support for devMode (low-res) and full-res generation.
  *
  * @api-declaration
- * buildPortraitUrl(prompt, settings) — pure; returns Pollinations fetch URL
- * generatePortrait(prompt, settings) — fetch image; returns object URL for preview
- * commitPortrait(objectUrl, avatarFilename) — upload image as character avatar
- * revokePreview(objectUrl)           — cleanup object URL after commit or discard
+ * buildPortraitUrl(prompt, settings, devMode) — pure; returns Pollinations fetch URL
+ * generatePortrait(prompt, settings)           — fetch image; returns object URL for preview
+ * commitPortrait(objectUrl, avatarFilename)    — upload image as character avatar
+ * revokePreview(objectUrl)                     — cleanup object URL after commit or discard
  *
  * @contract
  *   assertions:
  *     purity: Pure (buildPortraitUrl) / IO (generatePortrait, commitPortrait)
  *     state_ownership: []
- *     external_io: [Pollinations API, fetch /api/characters/edit-attribute,
+ *     external_io: [Pollinations API, findSecret, fetch /api/characters/edit-attribute,
  *                   URL.createObjectURL / revokeObjectURL]
  */
 
 import { error, log }  from './log.js';
+import { findSecret }  from '../../../secrets.js';
 import {
     POLLINATIONS_BASE_URL,
     POLLINATIONS_APP_KEY,
+    POLLINATIONS_SECRET_KEY_NAME,
     DEFAULT_PORTRAIT_PROMPT_TEMPLATE,
+    DEV_IMAGE_WIDTH,
+    DEV_IMAGE_HEIGHT,
 } from './defaults.js';
 
 const TAG = 'Portrait';
 
 // ─── Pure: URL builder ────────────────────────────────────────────────────────
 
-export function buildPortraitUrl(promptText, settings = {}) {
+/**
+ * Constructs the Pollinations API URL.
+ * @param {string} promptText — raw portrait prompt text
+ * @param {object} settings   — image_gen settings object
+ * @param {boolean} devMode   — if true, generates low-res preview
+ */
+export function buildPortraitUrl(promptText, settings = {}, devMode = false) {
     const template = settings.prompt_template ?? DEFAULT_PORTRAIT_PROMPT_TEMPLATE;
-    const full     = template.replace('{{prompt}}', promptText);
-    const encoded  = encodeURIComponent(full);
-    return `${POLLINATIONS_BASE_URL}/prompt/${encoded}` +
-           `?model=flux&nologo=true&private=true&enhance=true&app=${POLLINATIONS_APP_KEY}`;
+    const fullPrompt = template.replace('{{prompt}}', promptText);
+    
+    const params = new URLSearchParams({
+        width:  devMode ? String(DEV_IMAGE_WIDTH)  : '1024',
+        height: devMode ? String(DEV_IMAGE_HEIGHT) : '1024',
+        model:  'flux',
+        nologo: 'true',
+        enhance: 'true',
+        app:    POLLINATIONS_APP_KEY,
+    });
+
+    return `${POLLINATIONS_BASE_URL}/prompt/${encodeURIComponent(fullPrompt)}?${params.toString()}`;
 }
 
-// ─── IO: generation ───────────────────────────────────────────────────────────
+// ─── IO: Vault & Fetch ────────────────────────────────────────────────────────
+
+/**
+ * Retrieves the API key from the ST Secret Vault.
+ * @returns {Promise<object>} Headers object with Authorization
+ */
+async function _getAuthHeaders() {
+    const userKey = await findSecret(POLLINATIONS_SECRET_KEY_NAME);
+    
+    if (!userKey) {
+        throw new Error(
+            'Pollinations API key not found.\n\n' +
+            'Please go to Characteryze Settings and save your key to the vault.'
+        );
+    }
+    
+    return {
+        'Authorization': `Bearer ${userKey}`,
+    };
+}
 
 /**
  * Generate a portrait image and return a local preview object URL.
- * @param {string} promptText — raw portrait prompt text from codeblock
- * @param {object} settings   — extension_settings.characteryze.image_gen
+ * @param {string} promptText — raw portrait prompt text
+ * @param {object} settings   — extension_settings.characteryze
  * @returns {Promise<string>} object URL suitable for <img src>
  */
 export async function generatePortrait(promptText, settings = {}) {
-    const url = buildPortraitUrl(promptText, settings);
-    log(TAG, 'Fetching portrait from Pollinations');
+    const devMode = settings.devMode ?? false;
+    const url = buildPortraitUrl(promptText, settings.image_gen ?? {}, devMode);
+    
+    log(TAG, `Fetching portrait from ${devMode ? 'Dev' : 'Full'} Pollinations API`);
 
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`Pollinations fetch failed: ${resp.status}`);
+    const headers = await _getAuthHeaders();
+    const resp = await fetch(url, { headers });
+
+    if (!resp.ok) {
+        if (resp.status === 401 || resp.status === 403) {
+            throw new Error('Pollinations API Key is invalid or expired.');
+        }
+        throw new Error(`Pollinations fetch failed: ${resp.status}`);
+    }
 
     const blob      = await resp.blob();
     const objectUrl = URL.createObjectURL(blob);
@@ -100,7 +141,6 @@ export async function commitPortrait(objectUrl, avatarFilename) {
 
 /**
  * Release the object URL created by generatePortrait().
- * Call after commit or discard to avoid memory leaks.
  * @param {string} objectUrl
  */
 export function revokePreview(objectUrl) {

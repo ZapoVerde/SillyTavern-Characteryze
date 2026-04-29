@@ -1,18 +1,20 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-04-29T10:45:00.000Z"}
- * @version 1.2.0
+ * @stamp {"utc":"2026-04-29T11:00:00.000Z"}
+ * @version 1.3.0
  * @architectural-role Pure — Static Configuration
  * @description
  * Seed constants for Characteryze. Defines the naming convention for the 
- * user-created Host character and holds the schema for extension settings,
- * including the Forge Engine profile selector.
+ * user-created Host character and the schema for extension settings.
+ * Updated to support the authenticated Pollinations API (gen.pollinations.ai)
+ * and resolution-aware generation.
  *
  * @api-declaration
  * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
  * CANVAS_TYPES — enum of valid canvas type strings
  * FIELD_MAPS   — per-canvas ordered field descriptors
- * POLLINATIONS_BASE_URL, POLLINATIONS_APP_KEY
+ * POLLINATIONS_BASE_URL, POLLINATIONS_APP_KEY, POLLINATIONS_SECRET_KEY_NAME
+ * DEV_IMAGE_WIDTH, DEV_IMAGE_HEIGHT
  * DEFAULT_SETTINGS — shape of extension_settings.characteryze on first init
  *
  * @contract
@@ -65,8 +67,14 @@ export const FIELD_MAPS = Object.freeze({
     ],
 });
 
-export const POLLINATIONS_BASE_URL = 'https://image.pollinations.ai';
+/** Pollinations API Configuration (Aligned with Vistalyze) */
+export const POLLINATIONS_BASE_URL = 'https://gen.pollinations.ai';
 export const POLLINATIONS_APP_KEY  = 'characteryze';
+export const POLLINATIONS_SECRET_KEY_NAME = 'api_key_pollinations';
+
+/** Dev Mode Dimensions */
+export const DEV_IMAGE_WIDTH  = 320;
+export const DEV_IMAGE_HEIGHT = 180;
 
 export const DEFAULT_PORTRAIT_PROMPT_TEMPLATE =
     '{{prompt}}, character portrait, high detail, soft lighting, painterly.';
@@ -75,8 +83,9 @@ export const DEFAULT_PORTRAIT_PROMPT_TEMPLATE =
 export const DEFAULT_SETTINGS = Object.freeze({
     permasave_profile:  null,
     forge_profile_name: CTZ_FORGE_PROFILE_NAME,
-    forge_profile_id:   null,     // ID of the profile selected via Connection Manager
+    forge_profile_id:   null,
     ui_active:          false,
+    devMode:            false,    // Generates low-res previews when true
     known_sessions:     [],       // [{ filename, canvas_type, session_name, created_at }]
     draft_states:       {},       // keyed by chat filename
     image_gen: {

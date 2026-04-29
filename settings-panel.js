@@ -1,15 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/settings-panel.js
- * @stamp {"utc":"2026-04-29T10:50:00.000Z"}
- * @version 1.2.0
+ * @stamp {"utc":"2026-04-29T11:10:00.000Z"}
+ * @version 1.3.0
  * @architectural-role IO — Settings Panel UI
  * @description
- * Renders the Settings tab. Includes configuration for image generation,
- * session limits, and diagnostics. Features a "Forge Engine" selector 
- * powered by the SillyTavern Connection Manager.
- *
- * All writes go directly to extension_settings.characteryze via the standard
- * saveSettingsDebounced pathway. No state is held here.
+ * Renders the Settings tab. Manages image generation configuration, including 
+ * secure API key storage in the SillyTavern Secret Vault, connection testing,
+ * and LLM engine selection via the Connection Manager.
  *
  * @api-declaration
  * mountPanel(container) — inject settings HTML into container and wire inputs
@@ -18,14 +15,22 @@
  *   assertions:
  *     purity: IO
  *     state_ownership: []
- *     external_io: [DOM, extension_settings write, saveSettingsDebounced, setVerbose, ConnectionManagerRequestService]
+ *     external_io: [DOM, extension_settings write, saveSettingsDebounced, 
+ *                   writeSecret, secret_state, generatePortrait, ConnectionManagerRequestService]
  */
 
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
-import { log }                                        from './log.js';
+import { writeSecret, secret_state } from '../../../../secrets.js';
+import { log, error }                                 from './log.js';
 import { setVerbose, isVerbose }                      from './log.js';
-import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME, DEFAULT_PORTRAIT_PROMPT_TEMPLATE } from './defaults.js';
+import { generatePortrait, revokePreview }            from './portrait-studio.js';
+import { 
+    CTZ_EXT_NAME, 
+    CTZ_HOST_CHAR_NAME, 
+    POLLINATIONS_SECRET_KEY_NAME,
+    DEFAULT_PORTRAIT_PROMPT_TEMPLATE 
+} from './defaults.js';
 import { ConnectionManagerRequestService } from '../../shared.js';
 
 const TAG = 'Settings';
@@ -40,6 +45,7 @@ const TAG = 'Settings';
 export function mountPanel(container, idPrefix = 'ctz') {
     container.innerHTML = _buildHTML(idPrefix);
     _wire(container, idPrefix);
+    _updateKeyStatus(container, idPrefix);
     log(TAG, 'Mounted', idPrefix);
 }
 
@@ -69,53 +75,32 @@ function _buildHTML(p) {
             </section>
 
             <section class="ctz-section">
-                <h3 class="ctz-section-title">Image Generation</h3>
+                <h3 class="ctz-section-title">Image Generation (Pollinations)</h3>
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="${p}-ig-engine">Engine</label>
-                    <select id="${p}-ig-engine" class="ctz-select">
-                        <option value="pollinations" ${engine === 'pollinations' ? 'selected' : ''}>
-                            Pollinations (built-in)
-                        </option>
-                        <option value="custom" ${engine === 'custom' ? 'selected' : ''}>
-                            Custom Endpoint
-                        </option>
-                    </select>
+                    <label class="ctz-label">API Key Vault</label>
+                    <input type="password" id="${p}-pollinations-key" class="ctz-input" placeholder="Paste sk_... key" />
+                    <button id="${p}-pollinations-save" class="ctz-btn ctz-btn-sm">Save to Vault</button>
                 </div>
-                <div class="ctz-form-row" id="${p}-ig-endpoint-row"
-                     style="${engine !== 'custom' ? 'display:none' : ''}">
-                    <label class="ctz-label" for="${p}-ig-endpoint">Endpoint URL</label>
-                    <input id="${p}-ig-endpoint" class="ctz-input"
-                           value="${_esc(ig.endpoint ?? '')}"
-                           placeholder="https://…" />
+                <div id="${p}-key-status" class="ctz-hint" style="margin-left: 140px; margin-bottom: 10px;">
+                    Checking vault...
                 </div>
+
+                <div class="ctz-form-row">
+                    <label class="ctz-label">Diagnostics</label>
+                    <button id="${p}-test-connection" class="ctz-btn ctz-btn-sm">Test Connection</button>
+                    <span id="${p}-test-status" class="ctz-hint"></span>
+                </div>
+
+                <div class="ctz-form-row">
+                    <label class="ctz-label" for="${p}-dev-mode">Dev Mode</label>
+                    <input type="checkbox" id="${p}-dev-mode" class="ctz-checkbox" ${s.devMode ? 'checked' : ''} />
+                    <span class="ctz-hint">Generate low-res previews (saves credits)</span>
+                </div>
+
                 <div class="ctz-form-row">
                     <label class="ctz-label" for="${p}-ig-template">Prompt Template</label>
                     <textarea id="${p}-ig-template" class="ctz-input ctz-textarea"
                               rows="3">${_esc(tmpl)}</textarea>
-                    <small class="ctz-hint">Use <code>{{prompt}}</code> as placeholder.</small>
-                </div>
-            </section>
-
-            <section class="ctz-section">
-                <h3 class="ctz-section-title">Sessions</h3>
-                <div class="ctz-form-row">
-                    <label class="ctz-label" for="${p}-autosave">Autosave</label>
-                    <input type="checkbox" id="${p}-autosave" class="ctz-checkbox"
-                           ${sess.autosave !== false ? 'checked' : ''} />
-                </div>
-                <div class="ctz-form-row">
-                    <label class="ctz-label" for="${p}-max-saved">Max saved sessions</label>
-                    <input type="number" id="${p}-max-saved" class="ctz-input ctz-input-sm"
-                           value="${sess.max_saved ?? 50}" min="1" max="500" />
-                </div>
-            </section>
-
-            <section class="ctz-section">
-                <h3 class="ctz-section-title">Diagnostics</h3>
-                <div class="ctz-form-row">
-                    <label class="ctz-label" for="${p}-verbose">Verbose logging</label>
-                    <input type="checkbox" id="${p}-verbose" class="ctz-checkbox"
-                           ${isVerbose() ? 'checked' : ''} />
                 </div>
             </section>
 
@@ -126,10 +111,27 @@ function _buildHTML(p) {
                     <select id="${p}-forge-engine" class="ctz-select"></select>
                 </div>
                 <div class="ctz-form-row">
-                    <label class="ctz-label">Permasave (restore target)</label>
-                    <span class="ctz-muted">
-                        ${_esc(s.permasave_profile ?? '—')}
-                    </span>
+                    <label class="ctz-label">Permasave Target</label>
+                    <span class="ctz-muted">${_esc(s.permasave_profile ?? '—')}</span>
+                </div>
+            </section>
+
+            <section class="ctz-section">
+                <h3 class="ctz-section-title">Sessions & UI</h3>
+                <div class="ctz-form-row">
+                    <label class="ctz-label" for="${p}-autosave">Autosave</label>
+                    <input type="checkbox" id="${p}-autosave" class="ctz-checkbox"
+                           ${sess.autosave !== false ? 'checked' : ''} />
+                </div>
+                <div class="ctz-form-row">
+                    <label class="ctz-label" for="${p}-max-saved">Max sessions</label>
+                    <input type="number" id="${p}-max-saved" class="ctz-input ctz-input-sm"
+                           value="${sess.max_saved ?? 50}" min="1" max="500" />
+                </div>
+                <div class="ctz-form-row">
+                    <label class="ctz-label" for="${p}-verbose">Verbose logging</label>
+                    <input type="checkbox" id="${p}-verbose" class="ctz-checkbox"
+                           ${isVerbose() ? 'checked' : ''} />
                 </div>
             </section>
         </div>
@@ -141,56 +143,72 @@ function _buildHTML(p) {
 function _wire(container, p) {
     const s = () => extension_settings[CTZ_EXT_NAME];
 
-    const engineSel   = container.querySelector(`#${p}-ig-engine`);
-    const endpointRow = container.querySelector(`#${p}-ig-endpoint-row`);
-    const endpointIn  = container.querySelector(`#${p}-ig-endpoint`);
-    const templateTA  = container.querySelector(`#${p}-ig-template`);
-    const autosaveCb  = container.querySelector(`#${p}-autosave`);
-    const maxSavedIn  = container.querySelector(`#${p}-max-saved`);
-    const verboseCb   = container.querySelector(`#${p}-verbose`);
-
-    engineSel?.addEventListener('change', () => {
-        const isCustom = engineSel.value === 'custom';
-        if (endpointRow) endpointRow.style.display = isCustom ? '' : 'none';
-        s().image_gen.engine = engineSel.value;
+    // Image Gen Inputs
+    container.querySelector(`#${p}-ig-template`)?.addEventListener('input', (e) => {
+        s().image_gen.prompt_template = e.target.value;
         saveSettingsDebounced();
     });
 
-    endpointIn?.addEventListener('input', () => {
-        s().image_gen.endpoint = endpointIn.value.trim();
+    container.querySelector(`#${p}-dev-mode`)?.addEventListener('change', (e) => {
+        s().devMode = e.target.checked;
         saveSettingsDebounced();
     });
 
-    templateTA?.addEventListener('input', () => {
-        s().image_gen.prompt_template = templateTA.value;
+    // Vault Logic
+    const keyInput = container.querySelector(`#${p}-pollinations-key`);
+    container.querySelector(`#${p}-pollinations-save`)?.addEventListener('click', async () => {
+        const val = keyInput.value.trim();
+        if (!val) return;
+        await writeSecret(POLLINATIONS_SECRET_KEY_NAME, val, 'Characteryze: Pollinations');
+        keyInput.value = '';
+        _updateKeyStatus(container, p);
+        toastr.success('Pollinations key saved to vault.');
+    });
+
+    // Test Connection
+    const testBtn = container.querySelector(`#${p}-test-connection`);
+    const testStatus = container.querySelector(`#${p}-test-status`);
+    testBtn?.addEventListener('click', async () => {
+        testBtn.disabled = true;
+        testStatus.textContent = 'Generating test portrait...';
+        let previewUrl = null;
+        try {
+            previewUrl = await generatePortrait('A noble knight in shining armor', s());
+            testStatus.innerHTML = '<span style="color:var(--ctz-success)">Connected!</span>';
+            log(TAG, 'Test connection successful');
+        } catch (err) {
+            testStatus.innerHTML = `<span style="color:var(--ctz-danger)">Failed: ${err.message}</span>`;
+            error(TAG, 'Test connection failed', err);
+        } finally {
+            testBtn.disabled = false;
+            if (previewUrl) setTimeout(() => revokePreview(previewUrl), 5000);
+        }
+    });
+
+    // Sessions & UI
+    container.querySelector(`#${p}-autosave`)?.addEventListener('change', (e) => {
+        s().sessions.autosave = e.target.checked;
         saveSettingsDebounced();
     });
 
-    autosaveCb?.addEventListener('change', () => {
-        s().sessions.autosave = autosaveCb.checked;
-        saveSettingsDebounced();
-    });
-
-    maxSavedIn?.addEventListener('change', () => {
-        const val = parseInt(maxSavedIn.value, 10);
+    container.querySelector(`#${p}-max-saved`)?.addEventListener('change', (e) => {
+        const val = parseInt(e.target.value, 10);
         if (!isNaN(val) && val > 0) {
             s().sessions.max_saved = val;
             saveSettingsDebounced();
         }
     });
 
-    verboseCb?.addEventListener('change', () => {
-        setVerbose(verboseCb.checked);
-        s().verbose = verboseCb.checked;
+    container.querySelector(`#${p}-verbose`)?.addEventListener('change', (e) => {
+        setVerbose(e.target.checked);
+        s().verbose = e.target.checked;
         saveSettingsDebounced();
-        log(TAG, 'Verbose mode:', verboseCb.checked);
     });
 
     // Forge Engine Selector
-    const engineSelectorId = `#${p}-forge-engine`;
     try {
         ConnectionManagerRequestService.handleDropdown(
-            engineSelectorId,
+            `#${p}-forge-engine`,
             s().forge_profile_id ?? '',
             (profile) => {
                 s().forge_profile_id = profile?.id ?? null;
@@ -200,6 +218,18 @@ function _wire(container, p) {
         );
     } catch (err) {
         log(TAG, 'ConnectionManager failure:', err);
+    }
+}
+
+function _updateKeyStatus(container, p) {
+    const statusEl = container.querySelector(`#${p}-key-status`);
+    if (!statusEl) return;
+
+    const state = secret_state[POLLINATIONS_SECRET_KEY_NAME];
+    if (Array.isArray(state) && state.length > 0) {
+        statusEl.innerHTML = `<span style="color:var(--ctz-success)">● Configured (Saved in Vault)</span>`;
+    } else {
+        statusEl.innerHTML = `<span style="color:var(--ctz-danger)">○ Not Configured</span>`;
     }
 }
 
