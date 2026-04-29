@@ -43,6 +43,7 @@ const TAG = 'Workbench';
 
 let _container   = null;
 let _previewUrl  = null;   // portrait preview object URL, if any
+let _stageTimer  = null;   // debounce handle for auto-staging
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +102,6 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
             <div class="ctz-wb-main">
                 <div class="ctz-wb-toolbar">
                     <select id="ctz-field-select" class="ctz-select">${fieldOptions}</select>
-                    <button id="ctz-stage-btn" class="ctz-btn ctz-btn-sm">Stage →</button>
                     <button id="ctz-commit-btn" class="ctz-btn ctz-btn-primary"
                             ${dirtyKeys.length === 0 ? 'disabled' : ''}>
                         Commit (${dirtyKeys.length})
@@ -135,7 +135,6 @@ function _wire(ws, blocks, fields) {
     const fieldSelect  = _container.querySelector('#ctz-field-select');
     const livePane     = _container.querySelector('#ctz-live-pane');
     const draftPane    = _container.querySelector('#ctz-draft-pane');
-    const stageBtn     = _container.querySelector('#ctz-stage-btn');
     const commitBtn    = _container.querySelector('#ctz-commit-btn');
     const refreshBtn   = _container.querySelector('#ctz-wb-refresh-btn');
     const portraitArea = _container.querySelector('#ctz-portrait-preview-area');
@@ -151,6 +150,7 @@ function _wire(ws, blocks, fields) {
 
     // Field selection updates live pane and portrait area visibility
     fieldSelect?.addEventListener('change', () => {
+        clearTimeout(_stageTimer);   // discard any pending stage for the old field
         const fieldId = fieldSelect.value;
         const live    = getLiveValue(ws.canvas_type, fieldId, ws.target) ?? '';
         const draft   = ws.filename ? getDraftState(ws.filename) : {};
@@ -161,15 +161,32 @@ function _wire(ws, blocks, fields) {
 
     _togglePortraitArea(fields[0]?.id ?? '', portraitArea);
 
-    // Stage: write draft pane content into draft state
-    stageBtn?.addEventListener('click', () => {
-        if (!ws.filename) return;
-        const fieldId = fieldSelect?.value;
-        const value   = draftPane?.value ?? '';
-        if (!fieldId) return;
-        setDraftField(ws.filename, fieldId, value);
-        _render();   // re-render to show dirty markers + updated commit count
-        log(TAG, 'Staged field:', fieldId);
+    // Auto-stage: debounce draft pane input by 300 ms
+    draftPane?.addEventListener('input', () => {
+        clearTimeout(_stageTimer);
+        const fieldId = fieldSelect?.value;   // capture now, not when timer fires
+        if (!ws.filename || !fieldId) return;
+        _stageTimer = setTimeout(() => {
+            const value = draftPane.value;
+            setDraftField(ws.filename, fieldId, value);
+
+            // Partial DOM update — avoid full _render() which resets textarea state
+            const draft      = getDraftState(ws.filename);
+            const dirtyCount = Object.keys(draft).length;
+            if (commitBtn) {
+                commitBtn.disabled   = dirtyCount === 0;
+                commitBtn.textContent = `Commit (${dirtyCount})`;
+            }
+            // Update dirty marker on the currently-selected option
+            const opt = fieldSelect?.querySelector(`option[value="${CSS.escape(fieldId)}"]`);
+            if (opt) {
+                opt.dataset.dirty   = '1';
+                opt.textContent     = opt.textContent.endsWith(' ●')
+                    ? opt.textContent
+                    : opt.textContent.trimEnd() + ' ●';
+            }
+            log(TAG, 'Auto-staged field:', fieldId);
+        }, 300);
     });
 
     // Refresh blocks from live session
