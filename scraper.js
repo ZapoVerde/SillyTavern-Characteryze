@@ -1,25 +1,15 @@
 /**
  * @file data/default-user/extensions/characteryze/scraper.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T12:20:00.000Z"}
+ * @version 1.0.2
  * @architectural-role Pure — Codeblock Harvester
  * @description
  * Extracts codeblocks from ST chat message arrays by pure syntactic heuristic.
- * No AI instruction required — the harvester reads what is there.
- *
- * parseCodeblocks() is the pure core: takes a messages array, returns a flat
- * list of block descriptors. getSessionBlocks() is the thin IO wrapper that
- * reads the live context.chat and delegates to parseCodeblocks().
- *
- * The language tag (e.g. "description", "portrait-prompt") is captured as free
- * metadata for Workbench target suggestions. The harvester does not interpret
- * content — it only reads structure.
+ * Scans the entire provided message array (the full .jsonl history).
  *
  * @api-declaration
  * parseCodeblocks(messages) — pure; returns BlockDescriptor[] from messages array
  * getSessionBlocks()        — IO thin wrapper; reads SillyTavern.getContext().chat
- *
- * BlockDescriptor: { id, msgIndex, blockIndex, lang, content, ts, isUser }
  *
  * @contract
  *   assertions:
@@ -28,37 +18,60 @@
  *     external_io: [SillyTavern.getContext (getSessionBlocks only)]
  */
 
-// Matches fenced codeblocks: ```lang\ncontent\n``` (non-greedy, multiline)
-const CODEBLOCK_RE = /```(?<lang>[^\n`]*)\n(?<content>[\s\S]*?)```/g;
+/**
+ * Permissive Codeblock Regex
+ * 1. Matches triple backticks
+ * 2. Captures optional language (non-greedy, up to the first newline)
+ * 3. Captures content (non-greedy, including newlines)
+ * 4. Matches closing triple backticks
+ */
+const CODEBLOCK_RE = /```(?<lang>[^\r\n`]*?)(?:\r?\n)(?<content>[\s\S]*?)(?:\r?\n)```/g;
 
 /**
  * Extract all codeblocks from an array of ST chat message objects.
+ * Iterates through the entire chat history.
  * @param {Array} messages — context.chat or any compatible message array
  * @returns {Array} flat list of BlockDescriptor objects
  */
 export function parseCodeblocks(messages) {
     const blocks = [];
+    if (!Array.isArray(messages)) return blocks;
+
+    log('Scraper', `Scanning ${messages.length} messages for blocks...`);
+
     for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
         const msg = messages[msgIdx];
-        if (!msg?.mes) continue;
+        const text = msg?.mes;
+        if (typeof text !== 'string' || !text) continue;
 
+        // Reset regex state for the new string
         CODEBLOCK_RE.lastIndex = 0;
         let match;
         let blockIdx = 0;
-        while ((match = CODEBLOCK_RE.exec(msg.mes)) !== null) {
+        
+        while ((match = CODEBLOCK_RE.exec(text)) !== null) {
             blocks.push({
                 id:         `${msgIdx}-${blockIdx}`,
                 msgIndex:   msgIdx,
                 blockIndex: blockIdx,
-                lang:       match.groups.lang.trim().toLowerCase(),
-                content:    match.groups.content.replace(/\n$/, ''),
+                lang:       (match.groups.lang || '').trim().toLowerCase(),
+                content:    (match.groups.content || '').replace(/\r\n|\r/g, '\n'),
                 ts:         msg.send_date ?? null,
                 isUser:     !!(msg.is_user),
             });
             blockIdx++;
         }
     }
+    
+    log('Scraper', `Found ${blocks.length} blocks.`);
     return blocks;
+}
+
+/**
+ * Helper to log from this pure-ish module
+ */
+function log(tag, msg) {
+    console.log(`[CTZ:${tag}] ${msg}`);
 }
 
 /**
