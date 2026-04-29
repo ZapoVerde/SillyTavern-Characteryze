@@ -1,11 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/settings-panel.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T10:25:00.000Z"}
+ * @version 1.1.0
  * @architectural-role IO — Settings Panel UI
  * @description
- * Renders the Settings tab: image gen engine picker, prompt template editor,
- * autosave toggle, max saved sessions, and verbose logging toggle.
+ * Renders the Settings tab. Includes configuration for image generation,
+ * session limits, and diagnostics. Now features a prominent Setup section 
+ * instructing the user to create the mandatory Host character.
  *
  * All writes go directly to extension_settings.characteryze via the standard
  * saveSettingsDebounced pathway. No state is held here.
@@ -24,7 +25,7 @@ import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { log }                                        from './log.js';
 import { setVerbose, isVerbose }                      from './log.js';
-import { CTZ_EXT_NAME, DEFAULT_PORTRAIT_PROMPT_TEMPLATE } from './defaults.js';
+import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME, DEFAULT_PORTRAIT_PROMPT_TEMPLATE } from './defaults.js';
 
 const TAG = 'Settings';
 
@@ -52,6 +53,20 @@ function _buildHTML(p) {
 
     return `
         <div class="ctz-settings-panel">
+            <section class="ctz-section" style="background: var(--ctz-surface); padding: 12px; border-radius: var(--ctz-radius); border: 1px solid var(--ctz-accent);">
+                <h3 class="ctz-section-title" style="color: var(--ctz-accent);">Required Setup</h3>
+                <p class="ctz-muted" style="margin-bottom: 8px;">
+                    Characteryze requires an isolated character to host Forge sessions.
+                </p>
+                <div style="font-size: 13px;">
+                    1. Create a new, empty character.<br/>
+                    2. Set the Name exactly to: <strong>${_esc(CTZ_HOST_CHAR_NAME)}</strong>
+                </div>
+                <p class="ctz-hint" style="margin-top: 8px;">
+                    This character will store your brainstorming chats, keeping your main character library clean.
+                </p>
+            </section>
+
             <section class="ctz-section">
                 <h3 class="ctz-section-title">Image Generation</h3>
                 <div class="ctz-form-row">

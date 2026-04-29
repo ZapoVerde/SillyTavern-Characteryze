@@ -1,15 +1,15 @@
 /**
  * @file data/default-user/extensions/characteryze/index.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T10:20:00.000Z"}
+ * @version 1.1.0
  * @architectural-role IO — Extension Entry Point
  * @description
  * Bootstraps Characteryze. Registers the settings panel in the ST extensions
  * drawer, initialises extension_settings, and wires the Launch / Close buttons.
  *
- * The entry point owns the top-level launch and exit sequences. It delegates
- * all profile lifecycle work to profile-manager and all session lifecycle work
- * to session-manager. It does not hold business logic.
+ * The launch sequence now requires a manually created Host character to be 
+ * present in the user's roster, enforcing session isolation without 
+ * programmatic character injection.
  *
  * @api-declaration
  * (none — module-level side-effects only, executed on ST load)
@@ -24,9 +24,8 @@
 
 import { extension_settings } from '../../../extensions.js';
 import { saveSettingsDebounced }                            from '../../../../script.js';
-import { eventSource, event_types }           from '../../../../script.js';
 import { log, error, setVerbose }             from './log.js';
-import { CTZ_EXT_NAME, DEFAULT_SETTINGS }     from './defaults.js';
+import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME, DEFAULT_SETTINGS }     from './defaults.js';
 import {
     initProfileManager,
     ensureForgeProfile,
@@ -35,7 +34,6 @@ import {
     setUiActive,
 } from './profile-manager.js';
 import {
-    ensureInternalCharacter,
     pruneOldSessions,
 } from './session-manager.js';
 import {
@@ -97,8 +95,18 @@ function _wireDrawerButtons() {
 async function _onLaunch() {
     log(TAG, 'Launch');
     try {
-        const result = await ensureInternalCharacter();
-        if (result === 'needs_reload') return;  // toastr shown by ensureInternalCharacter
+        const ctx = SillyTavern.getContext();
+        const hostExists = ctx.characters.some(c => c.name === CTZ_HOST_CHAR_NAME);
+
+        if (!hostExists) {
+            toastr.error(
+                `Host character "${CTZ_HOST_CHAR_NAME}" not found. ` +
+                `Please create an empty character with this name first.`,
+                'Characteryze',
+                { timeOut: 10000 }
+            );
+            return;
+        }
 
         await ensureForgeProfile();
         pruneOldSessions();
@@ -138,7 +146,7 @@ function _mountPanels() {
     registerPanel('home', container => mountHome(container, {
         activateTab,
         onEnterForge: () => {
-            // Refresh forge strip whenever we enter the forge tab
+            // Switch to forge tab
             activateTab('forge');
         },
     }));

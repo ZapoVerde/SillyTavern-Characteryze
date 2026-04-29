@@ -1,15 +1,15 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T10:15:00.000Z"}
+ * @version 1.1.0
  * @architectural-role Pure — Static Configuration
  * @description
- * Seed constants for Characteryze. Nothing here is mutated at runtime.
- * All runtime state lives in extension_settings.characteryze or in module
- * memory. This file is referenced only for shape definitions and defaults.
+ * Seed constants for Characteryze. Defines the naming convention for the 
+ * user-created Host character used for session isolation. This file holds 
+ * static shapes and default values; nothing here is mutated at runtime.
  *
  * @api-declaration
- * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_INTERNAL_CHAR_FILENAME
+ * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
  * CANVAS_TYPES — enum of valid canvas type strings
  * FIELD_MAPS   — per-canvas ordered field descriptors
  * POLLINATIONS_BASE_URL, POLLINATIONS_APP_KEY
@@ -24,9 +24,12 @@
 
 export const CTZ_EXT_NAME              = 'characteryze';
 export const CTZ_FORGE_PROFILE_NAME    = 'Characteryze Forge';
-export const CTZ_INTERNAL_CHAR_FILENAME = '_characteryze_internal.png';
-// Chats for the internal character live under this directory name (avatar sans extension)
-export const CTZ_INTERNAL_CHAR_CHATDIR  = '_characteryze_internal';
+
+/** 
+ * Convention: Users must create a character with this exact name to act 
+ * as the isolated workbench for Forge sessions.
+ */
+export const CTZ_HOST_CHAR_NAME        = 'Characteryze Host';
 
 export const CANVAS_TYPES = Object.freeze({
     CHARACTER_CARD:   'character_card',
@@ -60,30 +63,6 @@ export const FIELD_MAPS = Object.freeze({
         { id: 'name',    label: 'Ruleset Name',    hint: 'ruleset-name'    },
         { id: 'content', label: 'Ruleset Content', hint: 'ruleset'         },
     ],
-});
-
-/**
- * Minimal V2 character card used as the internal Forge session host.
- * Inlined to avoid a runtime HTTP fetch for the asset file.
- */
-export const INTERNAL_CHARACTER_CARD = Object.freeze({
-    spec:         'chara_card_v2',
-    spec_version: '2.0',
-    data: Object.freeze({
-        name:                    'Characteryze',
-        description:             '',
-        personality:             '',
-        scenario:                '',
-        first_mes:               '',
-        mes_example:             '',
-        creator_notes:           'Internal Characteryze session host. Do not modify or chat with this character directly.',
-        system_prompt:           '',
-        post_history_instructions: '',
-        tags:                    [],
-        creator:                 'Characteryze',
-        character_version:       '1.0',
-        extensions: Object.freeze({ characteryze_internal: true }),
-    }),
 });
 
 export const POLLINATIONS_BASE_URL = 'https://image.pollinations.ai';
