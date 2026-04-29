@@ -25,6 +25,7 @@
 
 import { log, error }        from './log.js';
 import { CANVAS_TYPES }      from './defaults.js';
+import { promptManager }     from '../../../../scripts/openai.js';
 import {
     listSessions,
     newForgeSession,
@@ -73,9 +74,15 @@ function _buildHTML() {
         : '<p class="ctz-muted">No sessions yet. Start one below.</p>';
 
     const ctx        = SillyTavern.getContext();
-    const charOptions = ctx.characters.map((c, i) =>
+    const charOptions = ctx.characters.map(c =>
         `<option value="${_esc(c.avatar)}">${_esc(c.name)}</option>`,
     ).join('');
+
+    const rulesetOptions = promptManager
+        ? (promptManager.serviceSettings?.prompts ?? [])
+            .map(p => `<option value="${_esc(p.name)}">${_esc(p.name)}</option>`)
+            .join('')
+        : '';
 
     return `
         <div class="ctz-home-panel">
@@ -101,8 +108,12 @@ function _buildHTML() {
                             <option value="__new__">— Create New —</option>
                             ${charOptions}
                         </select>
-                        <input id="ctz-target-ruleset" class="ctz-input ctz-hidden"
-                               placeholder="Ruleset name…" />
+                        <select id="ctz-target-ruleset" class="ctz-select ctz-hidden">
+                            <option value="__new__">— Create New —</option>
+                            ${rulesetOptions}
+                        </select>
+                        <input id="ctz-target-ruleset-name" class="ctz-input ctz-hidden"
+                               placeholder="New ruleset name…" />
                     </div>
                 </div>
                 <button id="ctz-new-session-btn" class="ctz-btn ctz-btn-primary">
@@ -129,30 +140,45 @@ function _wire() {
         });
     });
 
-    // Canvas type changes target picker visibility
-    const canvasSelect = _container.querySelector('#ctz-canvas-select');
-    const charSelect   = _container.querySelector('#ctz-target-char');
-    const rulesetInput = _container.querySelector('#ctz-target-ruleset');
-    const targetLabel  = _container.querySelector('#ctz-target-label');
+    // Canvas type and ruleset selection drive target picker visibility
+    const canvasSelect      = _container.querySelector('#ctz-canvas-select');
+    const charSelect        = _container.querySelector('#ctz-target-char');
+    const rulesetSelect     = _container.querySelector('#ctz-target-ruleset');
+    const rulesetNameInput  = _container.querySelector('#ctz-target-ruleset-name');
+    const targetLabel       = _container.querySelector('#ctz-target-label');
 
-    canvasSelect?.addEventListener('change', () => {
+    function _updateTargetControls() {
         const isRuleset = canvasSelect.value === CANVAS_TYPES.RULESET;
         charSelect?.classList.toggle('ctz-hidden', isRuleset);
-        rulesetInput?.classList.toggle('ctz-hidden', !isRuleset);
-        if (targetLabel) targetLabel.textContent = isRuleset ? 'Ruleset Name' : 'Target Character';
-    });
+        rulesetSelect?.classList.toggle('ctz-hidden', !isRuleset);
+        if (targetLabel) targetLabel.textContent = isRuleset ? 'Ruleset' : 'Target Character';
+        // Name input only shown when creating a new ruleset
+        const isNewRuleset = isRuleset && rulesetSelect?.value === '__new__';
+        rulesetNameInput?.classList.toggle('ctz-hidden', !isNewRuleset);
+    }
+
+    canvasSelect?.addEventListener('change', _updateTargetControls);
+    rulesetSelect?.addEventListener('change', _updateTargetControls);
 
     // New session + enter forge
     _container.querySelector('#ctz-new-session-btn')?.addEventListener('click', async () => {
         const canvasType = canvasSelect?.value ?? CANVAS_TYPES.CHARACTER_CARD;
         const isRuleset  = canvasType === CANVAS_TYPES.RULESET;
-        const target     = isRuleset
-            ? (rulesetInput?.value.trim() || 'New Ruleset')
-            : (charSelect?.value ?? '__new__');
+
+        let target;
+        if (isRuleset) {
+            const selected = rulesetSelect?.value;
+            target = selected === '__new__'
+                ? (rulesetNameInput?.value.trim() || 'New Ruleset')
+                : selected;   // existing ruleset name
+        } else {
+            const selected = charSelect?.value;
+            target = selected === '__new__' ? null : selected;
+        }
 
         try {
             setWorkspaceCanvas(canvasType);
-            setWorkspaceTarget(target === '__new__' ? null : target);
+            setWorkspaceTarget(target);
             await newForgeSession(canvasType);
             _activateTab?.('forge');
             _onEnterForge?.();
