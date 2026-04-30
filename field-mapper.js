@@ -114,7 +114,7 @@ async function _commitCharCard(avatarFilename, draft) {
     }
 
     const payload = {
-        avatar:      avatarFilename,
+        avatar_url:  avatarFilename,
         ch_name:     draft.name        ?? char.data?.name        ?? char.name,
         description: draft.description ?? char.data?.description ?? char.description ?? '',
         personality: draft.personality ?? char.data?.personality ?? char.personality ?? '',
