@@ -47,14 +47,9 @@ function _ensureBridgeExists() {
             enabled:    true,
         }, CTZ_BRIDGE_PROMPT_ID);
 
-        // Wire into active character's prompt order (above chatHistory, per ST convention)
-        const order          = pm.getPromptOrderForCharacter(pm.activeCharacter);
-        const chatHistoryIdx = order.findIndex(e => e.identifier === 'chatHistory');
-        if (chatHistoryIdx !== -1) {
-            order.splice(chatHistoryIdx, 0, { identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
-        } else {
-            order.push({ identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
-        }
+        // Wire into active character's prompt order (top of stack)
+        const order = pm.getPromptOrderForCharacter(pm.activeCharacter);
+        order.unshift({ identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
 
         pm.saveServiceSettings();
         return;
@@ -65,12 +60,7 @@ function _ensureBridgeExists() {
     const inOrder = order.some(o => o.identifier === CTZ_BRIDGE_PROMPT_ID);
     if (!inOrder) {
         log(TAG, 'Wiring Bridge to character prompt order');
-        const chatHistoryIdx = order.findIndex(e => e.identifier === 'chatHistory');
-        if (chatHistoryIdx !== -1) {
-            order.splice(chatHistoryIdx, 0, { identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
-        } else {
-            order.push({ identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
-        }
+        order.unshift({ identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
         pm.saveServiceSettings();
     }
 }

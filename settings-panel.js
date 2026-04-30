@@ -23,6 +23,7 @@ import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { writeSecret, secret_state } from '../../../secrets.js';
 import { log, error }                                 from './log.js';
+import { activateTab }                               from './tab-bar.js';
 import { setVerbose, isVerbose }                      from './log.js';
 import { generatePortrait, revokePreview }            from './portrait-studio.js';
 import { 
@@ -146,6 +147,7 @@ function _buildHTML(p) {
                            ${isVerbose() ? 'checked' : ''} />
                 </div>
             </section>
+            <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
         </div>
     `;
 }
@@ -153,6 +155,8 @@ function _buildHTML(p) {
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
 function _wire(container, p) {
+    container.querySelector('.ctz-dismiss-handle')
+        ?.addEventListener('click', () => activateTab('forge'));
     const s = () => extension_settings[CTZ_EXT_NAME];
 
     // Image Gen Inputs

@@ -25,6 +25,7 @@
  */
 
 import { log, error }                              from './log.js';
+import { activateTab }                             from './tab-bar.js';
 import { generatePortrait, commitPortrait, revokePreview } from './portrait-studio.js';
 import { getSessionBlocks }                        from './scraper.js';
 import { getWorkspace }                            from './session-manager.js';
@@ -127,6 +128,8 @@ function _render() {
                     </div>
                 </div>
             </section>
+
+            <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
         </div>
     `;
 
@@ -136,6 +139,9 @@ function _render() {
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
 function _wire() {
+    _container.querySelector('.ctz-dismiss-handle')
+        ?.addEventListener('click', () => activateTab('forge'));
+
     const promptInput    = _container.querySelector('#ctz-portrait-prompt-input');
     const genBtn         = _container.querySelector('#ctz-portrait-gen-btn');
     const discardBtn     = _container.querySelector('#ctz-portrait-discard-btn');

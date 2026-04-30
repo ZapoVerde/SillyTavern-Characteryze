@@ -119,6 +119,8 @@ function _buildHTML() {
             <button id="ctz-enter-forge-btn" class="ctz-btn ctz-btn-primary ctz-btn-block">
                 Enter Forge
             </button>
+
+            <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
         </div>`;
 }
 
@@ -208,6 +210,10 @@ function _wire() {
         const sel = charSelect.value;
         setWorkspaceTarget(sel === '__new__' ? null : sel);
     });
+
+    // ── Dismiss ────────────────────────────────────────────────────────────────
+    _container.querySelector('.ctz-dismiss-handle')
+        ?.addEventListener('click', () => _activateTab?.('forge'));
 
     // ── Enter Forge ────────────────────────────────────────────────────────────
     const enterBtn = _container.querySelector('#ctz-enter-forge-btn');

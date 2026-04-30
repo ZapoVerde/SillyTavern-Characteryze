@@ -1,89 +1,97 @@
+
+
+
+Here is an updated `README.md` designed specifically for everyday users. It strips away the technical jargon and focuses entirely on what the extension does, how to set it up, and how to use it in your day-to-day writing.
+
+***
+
 # Characteryze
 
-A [SillyTavern](https://github.com/SillyTavern/SillyTavern) extension for AI-assisted character card and content creation. Characteryze gives you a structured Forge → Workbench workflow that keeps your live SillyTavern data safe until you're ready to commit.
+**Characteryze** is a SillyTavern extension that turns your AI into a collaborative writing assistant. 
+
+Have you ever wanted to chat with an AI to brainstorm character details, tweak a system prompt, or design a portrait, but didn't want to mess up your actual chat history or accidentally overwrite your character cards? 
+
+Characteryze solves this by providing a safe, isolated workspace. It lets you generate content in a sandbox, review it side-by-side with your live settings, and explicitly "commit" only the parts you like.
 
 ---
 
 ## What It Does
 
-Characteryze overlays a tabbed interface on top of SillyTavern's existing UI. You use ST's native chat pipeline to generate content, a codeblock scraper collects the output, and the Workbench lets you review and map each block to a specific target field before anything is written to disk.
+Characteryze places a tabbed overlay on top of SillyTavern. It uses a **Forge → Workbench** workflow:
 
-**Core loop:**
-
-1. Open the **Forge** (ST's native chat, running under the Characteryze connection profile)
-2. Ask the AI to generate character descriptions, dialogue, prompts, etc.
-3. AI output wrapped in codeblocks (` ```description `, ` ```portrait-prompt `, etc.) is scraped automatically
-4. Switch to the **Workbench** — select a source block, select a target field, stage it
-5. **Commit** — writes all staged fields to the ST character card / system prompt / ruleset entry
-
-Nothing is written until you explicitly commit.
+1. **The Forge:** A private sandbox chat. You talk to the AI, ask it to write descriptions, dialogue examples, or image prompts. 
+2. **The Workbench:** A drafting table. It automatically scans your Forge chat for anything the AI wrote in codeblocks (like ` ```description `). You can click on these blocks, edit them, and map them to your real SillyTavern fields.
+3. **Draft & Commit:** Nothing is actually written to your character card or settings until you click **Commit**. You are always safe to experiment.
 
 ---
 
-## Canvas Types
+## Features
 
-| Canvas | What Gets Edited |
-|---|---|
-| **Character Card** | Name, Description, Personality, Scenario, First Message, Example Dialogue, Avatar/Portrait |
-| **System Prompt Profile** | Main Prompt, NSFW Prompt, Jailbreak, Author's Note |
-| **Ruleset** | A named prompt manager entry in the Forge connection profile |
-
-Rulesets are instruction manuals for the AI — you build them the same way as any other content, then toggle them on/off in the Forge to shape future generation.
+* **Character Crafting:** Effortlessly draft and update Character Names, Descriptions, Personalities, Scenarios, and First Messages.
+* **System Prompt Tuning:** Modify your Main Prompts, NSFW Prompts, and Jailbreaks without navigating away from your brainstorming session.
+* **Ruleset Library:** Create custom instructions (like "Write like a sci-fi author" or "Use dark fantasy themes") and toggle them on and off to easily guide the AI's behavior in future generations.
+* **Portrait Studio:** Built-in image generation. Ask the AI for a `portrait-prompt`, generate an image using Pollinations, and instantly attach it as your character's avatar.
+* **No Mess:** When you launch Characteryze, your current settings are saved. When you click **Close**, you are returned to SillyTavern exactly as you left it.
 
 ---
 
-## Sessions
+## First-Time Setup
 
-Each Forge session is a standard ST chat JSONL tagged with a `characteryze` metadata marker. Sessions and targets are **decoupled** — a good writing session can be mined against multiple different characters without regenerating.
+Before you use Characteryze for the first time, you need to do two quick things:
 
-Sessions autosave via ST's native machinery. A one-shot LLM call generates a human-readable session name after the first reply.
+### 1. Create the Host Character (Required)
+To keep your sessions completely isolated from your normal chats, Characteryze needs an empty character to act as the host.
+1. Open SillyTavern and create a **new, blank character**.
+2. Name the character exactly: **`Characteryze Host`**
+3. Save it. You never need to look at or chat with this character manually.
 
----
-
-## Portrait Studio
-
-If the AI outputs a ` ```portrait-prompt ` codeblock, mapping it to the **Avatar / Portrait** field triggers an async image generation call using ST's configured image backend (Pollinations by default). The result previews in the Workbench right pane and is attached to the character card on commit.
-
----
-
-## Connection Profile Management
-
-On launch, Characteryze saves your current connection profile (`permasave_profile`) and swaps to the Forge profile. On exit, your original profile is restored and ST returns to the loading screen.
-
-A guard fires on every `CHAT_LOADED` event — if the Forge profile is somehow active outside Characteryze, it swaps back automatically.
+### 2. Add your Pollinations Key (Optional, for Portraits)
+If you want to use the Portrait Studio to generate character images:
+1. Open the Characteryze extension drawer and launch the app.
+2. Go to the **Settings** tab.
+3. Paste your Pollinations API key into the Vault and click **Save**. 
 
 ---
 
-## Installation
+## How to Use Characteryze (The Core Loop)
 
-1. In SillyTavern, open **Extensions → Install extension**
-2. Paste: `https://github.com/ZapoVerde/SillyTavern-Characteryze`
-3. Reload SillyTavern
-4. Open the **Extensions** panel, expand **Characteryze**, and click **Launch**
+### Step 1: Launch and Focus
+Open the SillyTavern extensions drawer, find Characteryze, and click **Launch**. 
+In the **Home** tab, choose your Focus:
+* **Canvas:** What are you making? (Character Card, System Prompt, or Ruleset).
+* **Target:** Who are you editing? (Choose an existing character to edit, or select `< New Character >`).
+* Click **Enter Forge**.
 
-Requires SillyTavern with extension support enabled.
+### Step 2: Brainstorm in the Forge
+You are now in an isolated chat. Ask the AI to write what you need. 
+* *Tip:* Tell the AI to output its ideas in markdown codeblocks (e.g., *"Write a detailed physical description for a rogue and put it in a \`\`\`description\`\`\` codeblock."*). Characteryze looks for these blocks automatically.
 
----
+### Step 3: Stage in the Workbench
+Switch to the **Workbench** tab. 
+1. On the left, you'll see a list of all the codeblocks the AI just generated.
+2. Click one to load it into your **Draft** pane.
+3. Use the dropdown menu above to select which field this text belongs to (e.g., *Personality*, *Scenario*, etc.).
+4. Edit the text in the Draft pane however you like. 
 
-## Tabs
+### Step 4: Commit
+Once you are happy with your draft, click the blue **Commit** button. This is the moment your changes are actually saved to SillyTavern. 
 
-| Tab | Description |
-|---|---|
-| **Home** | Session list, new session flow, canvas and target selectors |
-| **Forge** | ST's native chat UI under the Forge connection profile |
-| **Workbench** | Codeblock source navigator, field diff view (live left / draft right), stage and commit |
-| **Portrait** | Image generation preview and prompt editor |
-| **Settings** | Image gen engine, prompt template, session limits, verbose logging |
-
----
-
-## Compatibility
-
-- SillyTavern (latest main branch)
-- Optionally integrates with [SillyTavern-Personalyze](https://github.com/ZapoVerde/SillyTavern-Personalyze) for style selectors in portrait prompt templates
+*If you change your mind, you can just close the app—uncommitted drafts will be waiting for you next time, but won't affect your live SillyTavern data.*
 
 ---
 
-## Version
+## Managing Rulesets
 
-`0.1.0` — initial release
+Rulesets are instruction manuals for your AI. Instead of typing "Be highly descriptive and write in third-person" every time you chat, you can save it as a Ruleset.
+
+1. Go to the **Home** tab and set the Canvas to **Ruleset**.
+2. Go to the **Workbench**, name your Ruleset, write your instructions, and **Commit**.
+3. Anytime you are in the Forge, you can open the **Rulesets** tab and simply check the boxes next to the rules you want active. Characteryze handles injecting them into your prompt silently!
+
+---
+
+## Safely Exiting
+
+When you are done brainstorming, click the X button at the top right.
+
+Characteryze will gracefully pack up its workspace, clear away the sandbox, and restore your SillyTavern connection profiles and chat screen back to normal.

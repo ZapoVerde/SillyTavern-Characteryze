@@ -1,15 +1,16 @@
 /**
  * @file data/default-user/extensions/characteryze/tab-bar.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-30T00:00:00.000Z"}
+ * @version 2.0.0
  * @architectural-role IO — Tab Bar Overlay
  * @description
  * Renders and manages the CTZ overlay tab bar. Injects the overlay container
  * into the ST DOM, renders tab buttons, and shows/hides panel containers.
  *
- * Each tab has a corresponding panel slot. The Forge tab is special: it puts
- * the overlay into "chat mode" (no full panel — just the tab bar + forge strip
- * remain visible, leaving the ST chat fully accessible).
+ * 'forge' is a valid internal navigation target with no corresponding visible
+ * button. Activating it applies ctz-chat-mode (collapses the panel area,
+ * leaving the ST chat fully accessible). All "dismiss" paths — toggle-click,
+ * dismiss handle, click-outside — converge on activateTab('forge').
  *
  * Panel modules are not imported here — callers pass mount functions via
  * registerPanel(). This keeps tab-bar.js decoupled from panel implementations.
@@ -19,23 +20,25 @@
  * registerPanel(tabId, mountFn)   — bind a panel mount function to a tab slot
  * showOverlay()                   — make overlay visible
  * hideOverlay()                   — hide full overlay
- * activateTab(tabId)              — programmatically switch active tab
+ * activateTab(tabId)              — programmatically switch active tab (forge = collapse)
  * getActiveTab()                  — returns current tab id string
  *
  * @contract
  *   assertions:
  *     purity: IO
  *     state_ownership: [_activeTab, _panels]
- *     external_io: [DOM manipulation]
+ *     external_io: [DOM manipulation, session-manager read]
  */
 
-import { log } from './log.js';
+import { log }          from './log.js';
+import { getWorkspace } from './session-manager.js';
 
 const TAG = 'TabBar';
 
+// 'forge' is intentionally absent: it is a valid internal state (collapse /
+// chat mode) but has no visible button. See module description above.
 const TABS = [
     { id: 'home',      label: 'Home'      },
-    { id: 'forge',     label: 'Forge'     },
     { id: 'workbench', label: 'Workbench' },
     { id: 'portrait',  label: 'Portrait'  },
     { id: 'rulesets',  label: 'Rulesets'  },
@@ -79,6 +82,7 @@ export function showOverlay() {
 export function hideOverlay() {
     const el = document.getElementById('ctz-overlay');
     if (el) el.classList.add('ctz-hidden');
+    _closeMenu();
 }
 
 export function activateTab(tabId) {
@@ -100,9 +104,53 @@ function _injectOverlay() {
     overlay.innerHTML = _buildOverlayHTML();
     document.body.appendChild(overlay);
 
-    // Wire tab buttons
+    // Wire all tab buttons (desktop row + mobile nav)
     overlay.querySelectorAll('.ctz-tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => _setActiveTab(btn.dataset.tab));
+        btn.addEventListener('click', () => {
+            const tabId = btn.dataset.tab;
+
+            // Toggle: clicking the already-active tab collapses to forge/chat mode
+            if (tabId === _activeTab) {
+                _setActiveTab('forge');
+                _closeMenu();
+                return;
+            }
+
+            // Guard: no panel navigation until a session is active
+            if (tabId !== 'home' && !getWorkspace().filename) {
+                toastr.info('Enter the Forge first to access this panel.', 'Characteryze');
+                return;
+            }
+
+            _setActiveTab(tabId);
+            _closeMenu();
+        });
+    });
+
+    // Hamburger — stopPropagation prevents the document handler from immediately closing
+    document.getElementById('ctz-hamburger-btn')
+        ?.addEventListener('click', e => {
+            e.stopPropagation();
+            _toggleMenu();
+        });
+
+    // ✕ inside the mobile nav
+    document.getElementById('ctz-menu-close-btn')
+        ?.addEventListener('click', () => _closeMenu());
+
+    // Click anywhere outside the mobile nav closes it
+    document.addEventListener('click', e => {
+        const nav = document.getElementById('ctz-mobile-nav');
+        if (!nav || nav.classList.contains('ctz-menu-closed')) return;
+        if (!nav.contains(e.target)) _closeMenu();
+    });
+
+    // Click anywhere outside the overlay collapses the panel area
+    document.addEventListener('click', e => {
+        const ol = document.getElementById('ctz-overlay');
+        if (!ol || ol.classList.contains('ctz-hidden')) return;
+        if (_activeTab === 'forge') return;
+        if (!ol.contains(e.target)) _setActiveTab('forge');
     });
 
     // Wire exit button
@@ -114,25 +162,46 @@ function _injectOverlay() {
 }
 
 function _buildOverlayHTML() {
-    const tabBtns = TABS.map(t =>
+    const makeBtns = () => TABS.map(t =>
         `<button class="ctz-tab-btn" data-tab="${t.id}">${t.label}</button>`,
     ).join('');
 
-    // Forge gets its own slot outside .ctz-panel-area so it remains visible
-    // in chat mode (when .ctz-panel-area is hidden by .ctz-chat-mode).
     const panelSlots = TABS
-        .filter(t => t.id !== 'forge')
         .map(t => `<div id="ctz-panel-${t.id}" class="ctz-panel ctz-hidden" data-panel="${t.id}"></div>`)
         .join('');
 
     return `
         <div class="ctz-tab-bar">
-            <div class="ctz-tabs">${tabBtns}</div>
+            <button class="ctz-hamburger-btn" id="ctz-hamburger-btn" title="Open menu" aria-expanded="false" aria-controls="ctz-mobile-nav">☰</button>
+            <span class="ctz-active-label" id="ctz-active-label">Home</span>
+            <div class="ctz-tabs">${makeBtns()}</div>
             <button id="ctz-exit-btn" class="ctz-exit-btn" title="Exit Characteryze">✕</button>
         </div>
+        <nav class="ctz-mobile-nav ctz-menu-closed" id="ctz-mobile-nav" aria-label="Tab navigation">
+            <button class="ctz-menu-close-btn" id="ctz-menu-close-btn" title="Close menu" aria-label="Close navigation menu">✕</button>
+            ${makeBtns()}
+        </nav>
         <div id="ctz-panel-forge" class="ctz-hidden"></div>
         <div class="ctz-panel-area">${panelSlots}</div>
     `;
+}
+
+// ─── Mobile menu ──────────────────────────────────────────────────────────────
+
+function _toggleMenu() {
+    const nav = document.getElementById('ctz-mobile-nav');
+    if (!nav) return;
+    if (nav.classList.contains('ctz-menu-closed')) {
+        nav.classList.remove('ctz-menu-closed');
+        document.getElementById('ctz-hamburger-btn')?.setAttribute('aria-expanded', 'true');
+    } else {
+        _closeMenu();
+    }
+}
+
+function _closeMenu() {
+    document.getElementById('ctz-mobile-nav')?.classList.add('ctz-menu-closed');
+    document.getElementById('ctz-hamburger-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 // ─── Internal tab switching ───────────────────────────────────────────────────
@@ -142,7 +211,12 @@ function _setActiveTab(tabId) {
     _activeTab = tabId;
     log(TAG, 'Active tab:', tabId);
 
-    // Update tab button states
+    // Update mobile active label
+    const label = TABS.find(t => t.id === tabId)?.label ?? tabId;
+    const activeLabel = document.getElementById('ctz-active-label');
+    if (activeLabel) activeLabel.textContent = label;
+
+    // Update tab button states (applies to both desktop row and mobile nav)
     document.querySelectorAll('.ctz-tab-btn').forEach(btn => {
         btn.classList.toggle('ctz-tab-active', btn.dataset.tab === tabId);
     });

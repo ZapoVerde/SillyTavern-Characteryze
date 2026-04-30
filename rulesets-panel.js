@@ -26,6 +26,7 @@
 import { extension_settings }             from '../../../extensions.js';
 import { saveSettingsDebounced }          from '../../../../script.js';
 import { log, error }                     from './log.js';
+import { activateTab }                    from './tab-bar.js';
 import { getRulesetList, getRulesetContent } from './ruleset-library.js';
 import { publishToBridge }                from './prompt-bridge.js';
 import { CTZ_EXT_NAME }                   from './defaults.js';
@@ -62,6 +63,7 @@ function _buildHTML() {
                 <h3 class="ctz-section-title">Rulesets</h3>
                 <p class="ctz-muted">No rulesets found. Create one via the Workbench.</p>
             </div>
+            <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
         `;
     }
 
@@ -69,6 +71,23 @@ function _buildHTML() {
 
     const rows = list.map(name => {
         const enabled = activeList.includes(name);
+        const idx     = enabled ? activeList.indexOf(name) : -1;
+
+        const orderWidget = enabled ? `
+            <div class="ctz-order-widget">
+                <button class="ctz-icon-btn ctz-order-btn"
+                        data-name="${_esc(name)}"
+                        data-dir="-1"
+                        title="Move up"
+                        ${idx === 0 ? 'disabled' : ''}>&#8593;</button>
+                <span class="ctz-order-num">[${idx + 1}]</span>
+                <button class="ctz-icon-btn ctz-order-btn"
+                        data-name="${_esc(name)}"
+                        data-dir="1"
+                        title="Move down"
+                        ${idx === activeList.length - 1 ? 'disabled' : ''}>&#8595;</button>
+            </div>` : '';
+
         return `
             <label class="ctz-session-row" style="cursor:pointer;">
                 <input type="checkbox"
@@ -76,6 +95,7 @@ function _buildHTML() {
                        data-name="${_esc(name)}"
                        ${enabled ? 'checked' : ''} />
                 <span class="ctz-session-name">${_esc(name)}</span>
+                ${orderWidget}
             </label>`;
     }).join('');
 
@@ -87,12 +107,16 @@ function _buildHTML() {
             </p>
             <div class="ctz-session-list">${rows}</div>
         </div>
+        <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
     `;
 }
 
 // ─── Wiring & Publishing ──────────────────────────────────────────────────────
 
 function _wire() {
+    _container.querySelector('.ctz-dismiss-handle')
+        ?.addEventListener('click', () => activateTab('forge'));
+
     _container.querySelectorAll('.ctz-ruleset-toggle').forEach(cb => {
         cb.addEventListener('change', () => {
             const name      = cb.dataset.name;
@@ -117,7 +141,7 @@ function _wire() {
 
             // 3. Publish
             try {
-                // publishToBridge is synchronous, but we wrap in a try/catch in case it 
+                // publishToBridge is synchronous, but we wrap in a try/catch in case it
                 // throws an error regarding Text Completion backend incompatibility.
                 publishToBridge(concatenatedText);
                 log(TAG, `Published Library state (${settings.active_rulesets.length} active)`);
@@ -125,7 +149,7 @@ function _wire() {
                 // 4. Revert on failure
                 error(TAG, 'Publish failed, reverting toggle:', err.message);
                 cb.checked = !isChecked; // UI revert
-                
+
                 // State revert
                 if (isChecked) {
                     settings.active_rulesets = settings.active_rulesets.filter(n => n !== name);
@@ -133,9 +157,50 @@ function _wire() {
                     settings.active_rulesets.push(name);
                 }
                 saveSettingsDebounced();
-                
+
                 toastr.warning(err.message || 'Failed to apply ruleset.');
             }
+
+            _render();
+        });
+    });
+
+    _container.querySelectorAll('.ctz-order-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation(); // prevent label from toggling the checkbox
+
+            const name     = btn.dataset.name;
+            const dir      = parseInt(btn.dataset.dir, 10);
+            const settings = extension_settings[CTZ_EXT_NAME];
+            const arr      = settings.active_rulesets;
+            const idx      = arr.indexOf(name);
+
+            if (idx === -1) return;
+            const swapIdx = idx + dir;
+            if (swapIdx < 0 || swapIdx >= arr.length) return;
+
+            // Perform swap
+            [arr[idx], arr[swapIdx]] = [arr[swapIdx], arr[idx]];
+            saveSettingsDebounced();
+
+            // Concatenate and publish
+            const concatenatedText = arr
+                .map(n => getRulesetContent(n))
+                .filter(c => c && c.trim() !== '')
+                .join('\n\n');
+
+            try {
+                publishToBridge(concatenatedText);
+                log(TAG, `Reordered rulesets (${arr.length} active)`);
+            } catch (err) {
+                // Revert swap on failure
+                error(TAG, 'Reorder publish failed, reverting:', err.message);
+                [arr[idx], arr[swapIdx]] = [arr[swapIdx], arr[idx]];
+                saveSettingsDebounced();
+                toastr.warning(err.message || 'Failed to reorder ruleset.');
+            }
+
+            _render();
         });
     });
 }

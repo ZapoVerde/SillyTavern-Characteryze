@@ -92,6 +92,54 @@
 
 .ctz-exit-btn:hover { color: var(--ctz-danger); }
 
+/* ─── Hamburger / mobile nav (hidden on desktop) ────────────────────────────── */
+.ctz-hamburger-btn {
+    display:     none;
+    background:  transparent;
+    border:      none;
+    color:       var(--ctz-text);
+    cursor:      pointer;
+    font-size:   18px;
+    line-height: 1;
+    padding:     4px 8px;
+    flex-shrink: 0;
+}
+
+.ctz-active-label { display: none; }
+
+.ctz-mobile-nav { display: none; }
+
+.ctz-menu-close-btn {
+    background:  transparent;
+    border:      none;
+    color:       var(--ctz-muted);
+    cursor:      pointer;
+    font-size:   16px;
+    line-height: 1;
+    padding:     8px 12px;
+    align-self:  flex-end;
+}
+.ctz-menu-close-btn:hover { color: var(--ctz-danger); }
+
+/* ─── Dismiss handle ─────────────────────────────────────────────────────────── */
+.ctz-dismiss-handle {
+    display:        block;
+    width:          100%;
+    background:     transparent;
+    border:         none;
+    border-top:     1px solid var(--ctz-border);
+    color:          var(--ctz-muted);
+    cursor:         pointer;
+    font-size:      11px;
+    letter-spacing: .06em;
+    margin-top:     12px;
+    padding:        8px 0 2px;
+    text-align:     center;
+    text-transform: uppercase;
+    transition:     color .15s;
+}
+.ctz-dismiss-handle:hover { color: var(--ctz-text); }
+
 /* ─── Panel area ─────────────────────────────────────────────────────────────── */
 .ctz-panel-area {
     pointer-events: all;
@@ -164,6 +212,24 @@
 /* Generic list-row used by rulesets-panel */
 .ctz-session-row  { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--ctz-radius); border: 1px solid var(--ctz-border); }
 .ctz-session-name { flex: 1; font-size: 13px; }
+
+/* Ruleset ordering widget: ↑ [n] ↓ */
+.ctz-order-widget {
+    display:     flex;
+    align-items: center;
+    gap:         2px;
+    flex-shrink: 0;
+}
+
+.ctz-order-num {
+    font-family: monospace;
+    font-size:   12px;
+    color:       var(--ctz-muted);
+    min-width:   2.5ch;
+    text-align:  center;
+}
+
+.ctz-order-btn:not(:disabled):hover { color: var(--ctz-accent); }
 
 /* ─── Home panel ─────────────────────────────────────────────────────────────── */
 .ctz-home-panel { display: flex; flex-direction: column; gap: 16px; }
@@ -259,18 +325,61 @@
     min-width:      0;
 }
 
-/* Narrow viewport: sidebar collapses below the main area */
-@media (max-width: 500px) {
-    .ctz-workbench {
-        flex-direction: column;
+/* ─── Mobile layout (≤600px) ─────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+
+    /* Hamburger button and active-tab label replace the tab row */
+    .ctz-hamburger-btn { display: block; }
+
+    .ctz-active-label {
+        display:     block;
+        flex:        1;
+        font-size:   13px;
+        margin-left: 8px;
+        color:       var(--ctz-text);
+        overflow:    hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
     }
+
+    /* Hide the horizontal desktop tab row */
+    .ctz-tabs { display: none; }
+
+    /* Mobile nav dropdown — absolutely anchored below the tab bar */
+    .ctz-mobile-nav {
+        display:        flex;
+        flex-direction: column;
+        position:       absolute;
+        top:            var(--ctz-tab-h);
+        left:           0;
+        right:          0;
+        background:     var(--ctz-bg);
+        border-bottom:  1px solid var(--ctz-border);
+        pointer-events: all;
+        z-index:        2;
+    }
+
+    .ctz-mobile-nav.ctz-menu-closed { display: none; }
+
+    .ctz-mobile-nav .ctz-tab-btn {
+        text-align:    left;
+        border:        none;
+        border-bottom: 1px solid var(--ctz-border);
+        border-radius: 0;
+        font-size:     14px;
+        padding:       10px 16px;
+        width:         100%;
+    }
+
+    /* Workbench: sidebar collapses below the main editor */
+    .ctz-workbench { flex-direction: column; }
 
     .ctz-wb-main    { order: 1; }
 
     .ctz-wb-sidebar {
         order:      2;
         width:      100%;
-        max-height: 180px;   /* keep it compact once stacked */
+        max-height: 180px;
     }
 }
 

@@ -25,6 +25,7 @@
  */
 
 import { log, error }                     from './log.js';
+import { activateTab }                    from './tab-bar.js';
 import { getSessionBlocks }               from './scraper.js';
 import { getFieldList, getLiveValue, commitDraftState } from './field-mapper.js';
 import { generatePortrait, commitPortrait, revokePreview } from './portrait-studio.js';
@@ -139,6 +140,7 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
                 </div>
             </div>
         </div>
+        <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
     `;
 }
 
@@ -189,12 +191,17 @@ function _buildRulesetHTML(ws, _blocks, draft, dirtyKeys, blockItems) {
                 </div>
             </div>
         </div>
+        <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
     `;
 }
 
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
 function _wire(ws, blocks, fields) {
+    // Common: dismiss handle wired before canvas-type dispatch
+    _container.querySelector('.ctz-dismiss-handle')
+        ?.addEventListener('click', () => activateTab('forge'));
+
     if (ws.canvas_type === CANVAS_TYPES.RULESET) {
         _wireRuleset(ws, blocks);
         return;
