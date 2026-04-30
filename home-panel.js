@@ -210,8 +210,12 @@ function _wire() {
     });
 
     // ── Enter Forge ────────────────────────────────────────────────────────────
-    _container.querySelector('#ctz-enter-forge-btn')?.addEventListener('click', async () => {
+    const enterBtn = _container.querySelector('#ctz-enter-forge-btn');
+    enterBtn?.addEventListener('click', async () => {
         const filename = sessionSelect.value;
+        const orig = enterBtn.textContent;
+        enterBtn.disabled = true;
+        enterBtn.textContent = 'Preparing Forge…';
         try {
             if (filename) {
                 await loadForgeSession(filename);
@@ -223,7 +227,10 @@ function _wire() {
             log(TAG, filename ? 'Session loaded' : 'New session started', '→ Forge');
         } catch (err) {
             error(TAG, 'Enter Forge failed', err);
-            toastr.error('Failed to enter Forge.');
+            toastr.error(err.message || 'Failed to enter Forge.');
+        } finally {
+            enterBtn.disabled = false;
+            enterBtn.textContent = orig;
         }
     });
 }

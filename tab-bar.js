@@ -138,6 +138,7 @@ function _buildOverlayHTML() {
 // ─── Internal tab switching ───────────────────────────────────────────────────
 
 function _setActiveTab(tabId) {
+    if (!tabId) return;
     _activeTab = tabId;
     log(TAG, 'Active tab:', tabId);
 

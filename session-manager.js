@@ -35,7 +35,7 @@
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types, doNewChat }        from '../../../../script.js';
-import { log }                                         from './log.js';
+import { log }                                          from './log.js';
 import {
     CTZ_EXT_NAME,
     CTZ_HOST_CHAR_NAME,
@@ -64,12 +64,12 @@ export async function newForgeSession(sessionName = null) {
 
     const ctx = SillyTavern.getContext();
 
-    // Switch to host character (triggers CHAT_LOADED for its last chat)
+    const hostName = ctx.characters[charIdx].name;
+
     if (ctx.characterId !== charIdx) {
-        await _selectCharAndWait(ctx, charIdx);
+        await _selectCharAndWait(hostName);
     }
 
-    // Create a new chat for that character
     const filename = await _doNewChatAndWait();
     if (!filename) throw new Error('Could not determine new chat filename');
 
@@ -98,16 +98,13 @@ export async function loadForgeSession(filename) {
     }
 
     const ctx = SillyTavern.getContext();
+    const hostName = ctx.characters[charIdx].name;
 
     if (ctx.characterId !== charIdx) {
-        await _selectCharAndWait(ctx, charIdx);
+        await _selectCharAndWait(hostName);
     }
 
-    await new Promise(resolve => {
-        eventSource.once(event_types.CHAT_LOADED, resolve);
-        ctx.openCharacterChat(filename);
-    });
-
+    await _openChatAndWait(filename);
     _workspace.filename = filename;
     log(TAG, 'Session loaded:', filename);
 }
@@ -198,21 +195,49 @@ function _findInternalCharIdx() {
         .findIndex(c => c.name === CTZ_HOST_CHAR_NAME);
 }
 
-function _selectCharAndWait(ctx, charIdx) {
-    return new Promise(resolve => {
-        eventSource.once(event_types.CHAT_LOADED, resolve);
-        ctx.selectCharacterById(charIdx);
-    });
+function _timeout(ms, label) {
+    return new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
+    );
+}
+
+function _selectCharAndWait(hostName) {
+    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+    return Promise.race([
+        new Promise((resolve, reject) => {
+            eventSource.once(event_types.CHAT_LOADED, resolve);
+            executeSlashCommandsWithOptions(`/go "${hostName}"`).catch(reject);
+        }),
+        _timeout(12_000, 'Character select'),
+    ]);
 }
 
 function _doNewChatAndWait() {
-    return new Promise(resolve => {
-        eventSource.once(event_types.CHAT_LOADED, () => {
-            const c = SillyTavern.getContext();
-            resolve(c.characters[c.characterId]?.chat ?? null);
-        });
-        doNewChat();
-    });
+    const ctx = SillyTavern.getContext();
+    if (ctx.menuType === 'create') {
+        return Promise.reject(new Error('Close the character creation form before entering Forge.'));
+    }
+    return Promise.race([
+        new Promise((resolve, reject) => {
+            eventSource.once(event_types.CHAT_LOADED, () => {
+                const c = SillyTavern.getContext();
+                resolve(c.characters[c.characterId]?.chat ?? null);
+            });
+            doNewChat().catch(reject);
+        }),
+        _timeout(12_000, 'New chat'),
+    ]);
+}
+
+function _openChatAndWait(filename) {
+    const ctx = SillyTavern.getContext();
+    return Promise.race([
+        new Promise((resolve, reject) => {
+            eventSource.once(event_types.CHAT_LOADED, resolve);
+            ctx.openCharacterChat(filename).catch(reject);
+        }),
+        _timeout(12_000, 'Chat load'),
+    ]);
 }
 
 function _recordSession(entry) {
