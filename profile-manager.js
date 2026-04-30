@@ -197,7 +197,7 @@ export async function enterForge() {
     }
 
     // Prefer the event-updated cache; fall back to a direct settings read.
-    const currentProfile = _lastKnownProfile ?? _readActiveProfileName();
+    let currentProfile = _lastKnownProfile ?? _readActiveProfileName();
 
     if (!currentProfile) {
         throw new Error(

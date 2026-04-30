@@ -64,7 +64,9 @@ export async function newForgeSession(canvasType, sessionName = null) {
     const ctx = SillyTavern.getContext();
 
     // Switch to host character (triggers CHAT_LOADED for its last chat)
-    await _selectCharAndWait(ctx, charIdx);
+    if (ctx.characterId !== charIdx) {
+        await _selectCharAndWait(ctx, charIdx);
+    }
 
     // Create a new chat for that character
     const filename = await _doNewChatAndWait();
