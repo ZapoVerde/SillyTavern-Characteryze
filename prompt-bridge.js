@@ -31,37 +31,47 @@ const TAG = 'Bridge';
 // ─── Private Logic ────────────────────────────────────────────────────────────
 
 /**
- * Ensures the bridge prompt exists in the global list and is present in 
+ * Ensures the bridge prompt exists in the global list and is present in
  * the active character's prompt order.
  */
 function _ensureBridgeExists() {
     const pm = promptManager;
-    const prompts = pm.serviceSettings?.prompts ?? [];
-    const exists = prompts.some(p => p.identifier === CTZ_BRIDGE_PROMPT_ID);
 
-    if (!exists) {
+    if (!pm.getPromptById(CTZ_BRIDGE_PROMPT_ID)) {
         log(TAG, 'Creating Bridge slot:', CTZ_BRIDGE_PROMPT_ID);
-        const payload = {
+        pm.addPrompt({
             identifier: CTZ_BRIDGE_PROMPT_ID,
             name:       CTZ_BRIDGE_PROMPT_NAME,
             content:    '',
             role:       'system',
             enabled:    true,
-        };
-        pm.addPrompt(payload, CTZ_BRIDGE_PROMPT_ID);
-    }
+        }, CTZ_BRIDGE_PROMPT_ID);
 
-    // Ensure it is in the character's active prompt order so it actually fires
-    const ctx    = SillyTavern.getContext();
-    const charId = ctx.characterId;
-    if (charId != null && charId >= 0) {
-        const order = pm.getPromptOrderForCharacter(charId);
-        const inOrder = order.some(o => o.identifier === CTZ_BRIDGE_PROMPT_ID);
-        
-        if (!inOrder) {
-            log(TAG, 'Wiring Bridge to character prompt order');
+        // Wire into active character's prompt order (above chatHistory, per ST convention)
+        const order          = pm.getPromptOrderForCharacter(pm.activeCharacter);
+        const chatHistoryIdx = order.findIndex(e => e.identifier === 'chatHistory');
+        if (chatHistoryIdx !== -1) {
+            order.splice(chatHistoryIdx, 0, { identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
+        } else {
             order.push({ identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
         }
+
+        pm.saveServiceSettings();
+        return;
+    }
+
+    // Prompt already exists — ensure it is in the active character's order
+    const order   = pm.getPromptOrderForCharacter(pm.activeCharacter);
+    const inOrder = order.some(o => o.identifier === CTZ_BRIDGE_PROMPT_ID);
+    if (!inOrder) {
+        log(TAG, 'Wiring Bridge to character prompt order');
+        const chatHistoryIdx = order.findIndex(e => e.identifier === 'chatHistory');
+        if (chatHistoryIdx !== -1) {
+            order.splice(chatHistoryIdx, 0, { identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
+        } else {
+            order.push({ identifier: CTZ_BRIDGE_PROMPT_ID, enabled: true });
+        }
+        pm.saveServiceSettings();
     }
 }
 
@@ -82,7 +92,7 @@ export function publishToBridge(concatenatedString) {
 
     _ensureBridgeExists();
 
-    const prompt = pm.serviceSettings.prompts.find(p => p.identifier === CTZ_BRIDGE_PROMPT_ID);
+    const prompt = pm.getPromptById(CTZ_BRIDGE_PROMPT_ID);
     if (!prompt) {
         error(TAG, 'Bridge slot not found after attempted creation.');
         return;
