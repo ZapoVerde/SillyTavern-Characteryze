@@ -43,9 +43,10 @@ import { CTZ_EXT_NAME, CANVAS_TYPES }     from './defaults.js';
 
 const TAG = 'Workbench';
 
-let _container   = null;
-let _previewUrl  = null;   // portrait preview object URL, if any
-let _stageTimer  = null;   // debounce handle for auto-staging
+let _container        = null;
+let _previewUrl       = null;   // portrait preview object URL, if any
+let _stageTimer       = null;   // debounce handle for auto-staging
+let _lastSelectedField = null;  // persists dropdown selection across tab switches
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 
@@ -86,16 +87,22 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
         return _buildRulesetHTML(ws, blocks, draft, dirtyKeys, blockItems);
     }
 
+    let activeField = fields.find(f => f.id === _lastSelectedField)?.id;
+    if (!activeField) {
+        activeField = fields[0]?.id ?? '';
+        _lastSelectedField = activeField;
+    }
+
     const fieldOptions = fields.map(f => {
-        const dirty = dirtyKeys.includes(f.id);
-        return `<option value="${_esc(f.id)}" ${dirty ? 'data-dirty="1"' : ''}>
+        const dirty    = dirtyKeys.includes(f.id);
+        const selected = f.id === activeField ? 'selected' : '';
+        return `<option value="${_esc(f.id)}" ${selected} ${dirty ? 'data-dirty="1"' : ''}>
             ${_esc(f.label)}${dirty ? ' ●' : ''}
         </option>`;
     }).join('');
 
-    const firstField  = fields[0]?.id ?? '';
-    const liveText    = firstField ? (getLiveValue(ws.canvas_type, firstField, ws.target) ?? '') : '';
-    const draftText   = draft[firstField] ?? '';
+    const liveText  = activeField ? (getLiveValue(ws.canvas_type, activeField, ws.target) ?? '') : '';
+    const draftText = draft[activeField] ?? '';
 
     return `
         <div class="ctz-workbench">
@@ -205,22 +212,33 @@ function _wire(ws, blocks, fields) {
     _container.querySelectorAll('.ctz-block-item').forEach(item => {
         item.addEventListener('click', () => {
             const block = blocks.find(b => b.id === item.dataset.id);
-            if (block && draftPane) draftPane.value = block.content;
+            if (block && draftPane) {
+                draftPane.value = block.content;
+                draftPane.dispatchEvent(new Event('input')); // trigger auto-stage
+            }
         });
     });
 
     // Field selection updates live pane and portrait area visibility
     fieldSelect?.addEventListener('change', () => {
-        clearTimeout(_stageTimer);   // discard any pending stage for the old field
+        // Flush any pending save for the departing field instead of discarding it
+        if (_stageTimer) {
+            clearTimeout(_stageTimer);
+            _stageTimer = null;
+            if (ws.filename && _lastSelectedField) {
+                setDraftField(ws.filename, _lastSelectedField, draftPane.value);
+            }
+        }
         const fieldId = fieldSelect.value;
-        const live    = getLiveValue(ws.canvas_type, fieldId, ws.target) ?? '';
-        const draft   = ws.filename ? getDraftState(ws.filename) : {};
+        _lastSelectedField = fieldId;
+        const live  = getLiveValue(ws.canvas_type, fieldId, ws.target) ?? '';
+        const draft = ws.filename ? getDraftState(ws.filename) : {};
         if (livePane)  livePane.value  = live;
         if (draftPane) draftPane.value = draft[fieldId] ?? '';
         _togglePortraitArea(fieldId, portraitArea);
     });
 
-    _togglePortraitArea(fields[0]?.id ?? '', portraitArea);
+    _togglePortraitArea(_lastSelectedField ?? fields[0]?.id ?? '', portraitArea);
 
     // Auto-stage: debounce draft pane input by 300 ms
     draftPane?.addEventListener('input', () => {
@@ -298,11 +316,18 @@ function _wireRuleset(ws, blocks) {
 
     // Librarian Dropdown Change
     targetSelect?.addEventListener('change', () => {
-        clearTimeout(_stageTimer);
+        // Flush any pending save before switching targets instead of discarding it
+        if (_stageTimer) {
+            clearTimeout(_stageTimer);
+            _stageTimer = null;
+            if (ws.filename) {
+                setDraftField(ws.filename, 'content', draftPane.value);
+            }
+        }
         const newTarget = targetSelect.value;
         setWorkspaceTarget(newTarget);
         refreshPanel();
-        refreshStrip(); // Sync the Forge strip display
+        refreshStrip();
         log(TAG, 'Switched Ruleset target:', newTarget);
     });
 
@@ -310,7 +335,10 @@ function _wireRuleset(ws, blocks) {
     _container.querySelectorAll('.ctz-block-item').forEach(item => {
         item.addEventListener('click', () => {
             const block = blocks.find(b => b.id === item.dataset.id);
-            if (block && draftPane) draftPane.value = block.content;
+            if (block && draftPane) {
+                draftPane.value = block.content;
+                draftPane.dispatchEvent(new Event('input')); // trigger auto-stage
+            }
         });
     });
 
