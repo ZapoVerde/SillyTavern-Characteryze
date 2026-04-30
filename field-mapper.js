@@ -20,11 +20,11 @@
  *     purity: Pure (getFieldList, getLiveValue) / IO (commitDraftState)
  *     state_ownership: []
  *     external_io: [fetch /api/characters/edit, oai_settings write,
- *                   ruleset-library write, saveSettingsDebounced]
+ *                   ruleset-library write, promptManager.saveServiceSettings]
  */
 
-import { oai_settings }          from '../../../../scripts/openai.js';
-import { saveSettingsDebounced } from '../../../../script.js';
+import { promptManager }         from '../../../../scripts/openai.js';
+
 import { log, error }            from './log.js';
 import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
 import { getRulesetContent, saveRuleset } from './ruleset-library.js';
@@ -35,6 +35,13 @@ const TAG = 'FieldMapper';
 // ─── Pure: field lists ────────────────────────────────────────────────────────
 
 export function getFieldList(canvasType) {
+    if (canvasType === CANVAS_TYPES.SYSTEM_PROMPT) {
+        return (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
+            id:    p.identifier,
+            label: p.name,
+            hint:  p.identifier,
+        }));
+    }
     return FIELD_MAPS[canvasType] ?? [];
 }
 
@@ -60,15 +67,8 @@ function _charLive(fieldId, avatarFilename) {
 }
 
 function _syspromptLive(fieldId) {
-    // Map Characteryze field IDs to oai_settings keys
-    const KEY_MAP = {
-        main:      'main_prompt',
-        nsfw:      'nsfw_prompt',
-        jailbreak: 'jailbreak_prompt',
-        an:        'wi_format',
-    };
-    const key = KEY_MAP[fieldId];
-    return key ? (oai_settings[key] ?? '') : '';
+    const prompts = promptManager?.serviceSettings?.prompts ?? [];
+    return prompts.find(p => p.identifier === fieldId)?.content ?? '';
 }
 
 function _rulesetLive(fieldId, rulesetName) {
@@ -137,17 +137,14 @@ async function _commitCharCard(avatarFilename, draft) {
 }
 
 function _commitSysPrompt(draft) {
-    const KEY_MAP = {
-        main:      'main_prompt',
-        nsfw:      'nsfw_prompt',
-        jailbreak: 'jailbreak_prompt',
-        an:        'wi_format',
-    };
-    for (const [fieldId, value] of Object.entries(draft)) {
-        const key = KEY_MAP[fieldId];
-        if (key) oai_settings[key] = value;
+    const pm = promptManager;
+    if (!pm) return;
+    const prompts = pm.serviceSettings?.prompts ?? [];
+    for (const [identifier, value] of Object.entries(draft)) {
+        const prompt = prompts.find(p => p.identifier === identifier);
+        if (prompt) prompt.content = value;
     }
-    saveSettingsDebounced();
+    pm.saveServiceSettings();
     log(TAG, 'System prompt fields committed');
 }
 

@@ -59,12 +59,6 @@ export const FIELD_MAPS = Object.freeze({
         { id: 'mes_example', label: 'Example Dialogue', hint: 'example'     },
         { id: 'portrait',    label: 'Avatar / Portrait', hint: 'portrait-prompt' },
     ],
-    [CANVAS_TYPES.SYSTEM_PROMPT]: [
-        { id: 'main',      label: 'Main Prompt',   hint: 'main'      },
-        { id: 'nsfw',      label: 'NSFW Prompt',   hint: 'nsfw'      },
-        { id: 'jailbreak', label: 'Jailbreak',     hint: 'jailbreak' },
-        { id: 'an',        label: "Author's Note",  hint: 'note'      },
-    ],
     [CANVAS_TYPES.RULESET]: [
         { id: 'name',    label: 'Ruleset Name',    hint: 'ruleset-name'    },
         { id: 'content', label: 'Ruleset Content', hint: 'ruleset'         },
