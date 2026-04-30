@@ -91,8 +91,6 @@ export const DEFAULT_PORTRAIT_PROMPT_TEMPLATE =
 /** Shape of extension_settings.characteryze — written on first init. */
 export const DEFAULT_SETTINGS = Object.freeze({
     permasave_profile:   null,
-    permasave_character: null,
-    permasave_chat:      null,
     forge_profile_name: CTZ_FORGE_PROFILE_NAME,
     forge_profile_id:   null,
     ui_active:          false,
