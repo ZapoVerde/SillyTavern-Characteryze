@@ -40,13 +40,14 @@ import {
 import {
     initTabBar,
     registerPanel,
+    registerTabActivate,
     showOverlay,
     hideOverlay,
     activateTab,
 } from './tab-bar.js';
 import { mountPanel as mountHome }      from './home-panel.js';
 import { mountPanel as mountForge }     from './forge-panel.js';
-import { mountPanel as mountWorkbench } from './workbench-panel.js';
+import { mountPanel as mountWorkbench, refreshPanel as refreshWorkbench } from './workbench-panel.js';
 import { mountPanel as mountPortrait }  from './portrait-panel.js';
 import { mountPanel as mountRulesets }  from './rulesets-panel.js';
 import { mountPanel as mountSettings }  from './settings-panel.js';
@@ -169,6 +170,7 @@ function _mountPanels() {
     }));
     registerPanel('forge',     container => mountForge(container));
     registerPanel('workbench', container => mountWorkbench(container));
+    registerTabActivate('workbench', refreshWorkbench);
     registerPanel('portrait',  container => mountPortrait(container));
     registerPanel('rulesets',  container => mountRulesets(container));
     registerPanel('settings',  container => mountSettings(container, 'ctz'));

@@ -81,7 +81,7 @@ export async function newForgeSession(canvasType, sessionName = null) {
     };
 
     // For rulesets, the default target is the "new" sentinel
-    const target = canvasType === CANVAS_TYPES.RULESET ? '__new__' : null;
+    const target = canvasType === CANVAS_TYPES.RULESET ? '__new__' : (_workspace.target ?? null);
 
     _recordSession(entry);
     _workspace = { filename, canvas_type: canvasType, target };

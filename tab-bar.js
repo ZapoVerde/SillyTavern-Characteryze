@@ -42,10 +42,11 @@ const TABS = [
     { id: 'settings',  label: 'Settings'  },
 ];
 
-let _activeTab = 'home';
-let _panels    = {};     // tabId → mountFn(containerEl)
-let _onExit    = null;
-let _mounted   = false;
+let _activeTab         = 'home';
+let _panels            = {};     // tabId → mountFn(containerEl)
+let _activateCallbacks = {};     // tabId → fn()
+let _onExit            = null;
+let _mounted           = false;
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,10 @@ export function registerPanel(tabId, mountFn) {
     _panels[tabId] = mountFn;
     const slot = document.getElementById(`ctz-panel-${tabId}`);
     if (slot) mountFn(slot);
+}
+
+export function registerTabActivate(tabId, fn) {
+    _activateCallbacks[tabId] = fn;
 }
 
 // ─── Public controls ──────────────────────────────────────────────────────────
@@ -155,4 +160,6 @@ function _setActiveTab(tabId) {
     if (overlay) {
         overlay.classList.toggle('ctz-chat-mode', tabId === 'forge');
     }
+
+    _activateCallbacks[tabId]?.();
 }
