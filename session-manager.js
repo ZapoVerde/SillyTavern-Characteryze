@@ -1,21 +1,22 @@
 /**
  * @file data/default-user/extensions/characteryze/session-manager.js
- * @stamp {"utc":"2026-04-29T14:00:00.000Z"}
- * @version 1.2.0
+ * @stamp {"utc":"2026-04-30T00:00:00.000Z"}
  * @architectural-role Stateful — Forge Session Lifecycle
  * @description
  * Owns the active workspace object and the known_sessions index. Handles
  * session creation, loading, and draft state persistence.
  *
- * Refactored for Librarian Workbench (Phase 2): supports composite draft 
- * keys for rulesets to allow switching between multiple ruleset targets 
- * within the same chat session without losing uncommitted work.
+ * Decoupled (Phase 3): sessions no longer own a canvas type. Canvas and
+ * target are independent workspace state set by the Home panel directly.
+ * All canvas types now use composite draft keys (filename::canvas::target).
  *
  * @api-declaration
- * newForgeSession(canvasType, name?)    — create new chat, record session; returns entry
- * loadForgeSession(filename)            — open existing session chat
+ * newForgeSession(name?)                — create new chat, record session; returns entry
+ * loadForgeSession(filename)            — open existing session chat (filename only)
  * listSessions()                        — returns known_sessions array (copy)
  * pruneOldSessions()                    — trim to max_saved limit
+ * renameSession(filename, newName)      — update session_name in known_sessions
+ * deleteSession(filename)               — remove session record from known_sessions
  * getWorkspace()                        — returns current workspace snapshot
  * setWorkspaceCanvas(canvasType)        — update canvas type
  * setWorkspaceTarget(target)            — update target entity
@@ -27,18 +28,17 @@
  *   assertions:
  *     purity: Stateful / IO
  *     state_ownership: [_workspace]
- *     external_io: [SillyTavern context, extension_settings write, 
+ *     external_io: [SillyTavern context, extension_settings write,
  *                   saveSettingsDebounced, toastr]
  */
 
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types, doNewChat }        from '../../../../script.js';
-import { log, error }                                 from './log.js';
+import { log }                                         from './log.js';
 import {
     CTZ_EXT_NAME,
     CTZ_HOST_CHAR_NAME,
-    CANVAS_TYPES,
 } from './defaults.js';
 
 const TAG = 'Session';
@@ -53,9 +53,10 @@ let _workspace = {
 
 /**
  * Creates a new chat session for the Forge.
- * Requires the Host character to exist in the user's roster.
+ * Canvas and target are already set on _workspace by the Home panel before
+ * this is called; this function only handles the ST chat lifecycle.
  */
-export async function newForgeSession(canvasType, sessionName = null) {
+export async function newForgeSession(sessionName = null) {
     const charIdx = _findInternalCharIdx();
     if (charIdx === -1) {
         throw new Error(`Host character "${CTZ_HOST_CHAR_NAME}" not found.`);
@@ -75,22 +76,20 @@ export async function newForgeSession(canvasType, sessionName = null) {
     const name  = sessionName ?? _timestampName();
     const entry = {
         filename,
-        canvas_type:  canvasType,
         session_name: name,
         created_at:   new Date().toISOString(),
     };
 
-    // For rulesets, the default target is the "new" sentinel
-    const target = canvasType === CANVAS_TYPES.RULESET ? '__new__' : (_workspace.target ?? null);
-
     _recordSession(entry);
-    _workspace = { filename, canvas_type: canvasType, target };
-    log(TAG, 'New session:', filename, '| Target:', target);
+    _workspace.filename = filename;
+    log(TAG, 'New session:', filename);
     return entry;
 }
 
 /**
  * Loads an existing Forge session chat.
+ * Only updates _workspace.filename — canvas and target remain as configured
+ * by the Home panel dropdowns.
  */
 export async function loadForgeSession(filename) {
     const charIdx = _findInternalCharIdx();
@@ -109,16 +108,8 @@ export async function loadForgeSession(filename) {
         ctx.openCharacterChat(filename);
     });
 
-    const session    = _getSession(filename);
-    const canvasType = session?.canvas_type ?? null;
-    const target     = canvasType === CANVAS_TYPES.RULESET ? '__new__' : null;
-
-    _workspace = {
-        filename,
-        canvas_type: canvasType,
-        target:      target,
-    };
-    log(TAG, 'Session loaded:', filename, '| Target:', target);
+    _workspace.filename = filename;
+    log(TAG, 'Session loaded:', filename);
 }
 
 export function listSessions() {
@@ -133,6 +124,21 @@ export function pruneOldSessions() {
         saveSettingsDebounced();
         log(TAG, `Pruned to ${max} sessions`);
     }
+}
+
+export function renameSession(filename, newName) {
+    const settings = extension_settings[CTZ_EXT_NAME];
+    const session  = settings.known_sessions.find(s => s.filename === filename);
+    if (session) {
+        session.session_name = newName;
+        saveSettingsDebounced();
+    }
+}
+
+export function deleteSession(filename) {
+    const settings = extension_settings[CTZ_EXT_NAME];
+    settings.known_sessions = settings.known_sessions.filter(s => s.filename !== filename);
+    saveSettingsDebounced();
 }
 
 // ─── Workspace ────────────────────────────────────────────────────────────────
@@ -152,15 +158,16 @@ export function setWorkspaceTarget(target) {
 // ─── Draft state ──────────────────────────────────────────────────────────────
 
 /**
- * Derives the key for the draft state based on canvas type.
- * For Rulesets, we use a composite key to allow multi-document editing.
+ * Composite key for all canvas types so switching targets within a session
+ * never overwrites a different target's draft.
+ * explicitTarget is passed by clearDraftState for Save-As safety (ruleset rename).
  */
 function _getDraftKey(filename, explicitTarget) {
-    if (_workspace.canvas_type === CANVAS_TYPES.RULESET) {
-        const target = explicitTarget !== undefined ? explicitTarget : (_workspace.target ?? '__new__');
-        return `${filename}::${target}`;
-    }
-    return filename;
+    const canvas = _workspace.canvas_type ?? 'unknown';
+    const target = explicitTarget !== undefined
+        ? String(explicitTarget)
+        : String(_workspace.target ?? 'null');
+    return `${filename}::${canvas}::${target}`;
 }
 
 export function getDraftState(filename) {
@@ -217,11 +224,6 @@ function _recordSession(entry) {
         settings.known_sessions.push(entry);
     }
     saveSettingsDebounced();
-}
-
-function _getSession(filename) {
-    return extension_settings[CTZ_EXT_NAME]?.known_sessions
-        .find(s => s.filename === filename) ?? null;
 }
 
 function _timestampName() {
