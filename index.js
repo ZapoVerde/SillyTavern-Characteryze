@@ -23,14 +23,16 @@
  */
 
 import { extension_settings } from '../../../extensions.js';
-import { saveSettingsDebounced }                            from '../../../../script.js';
+import { saveSettingsDebounced, eventSource, event_types } from '../../../../script.js';
 import { log, error, setVerbose }             from './log.js';
+import { escapeMacros }                       from './macro-escape.js';
 import { CTZ_EXT_NAME, CTZ_HOST_CHAR_NAME, DEFAULT_SETTINGS }     from './defaults.js';
 import {
     initProfileManager,
     enterForge,
     exitForge,
     setUiActive,
+    isUiActive,
 } from './profile-manager.js';
 import {
     pruneOldSessions,
@@ -80,8 +82,22 @@ jQuery(() => {
     initProfileManager();
     _injectDrawer();
     _wireDrawerButtons();
+    eventSource.on(event_types.GENERATION_AFTER_COMMANDS, _onGenerationAfterCommands);
     log(TAG, 'Extension loaded');
 });
+
+// ─── Macro escape hook ────────────────────────────────────────────────────────
+
+// Fires inside Generate() after slash-command processing, before the textarea
+// is read and passed to sendMessageAsUser(). We transform \{{ → {ZWS{ here so
+// substituteParams never sees a bare {{ to replace.
+function _onGenerationAfterCommands(_type, _opts, dryRun) {
+    if (!isUiActive() || dryRun) return;
+    const textarea = document.querySelector('#send_textarea');
+    if (!textarea) return;
+    const escaped = escapeMacros(textarea.value);
+    if (escaped !== textarea.value) textarea.value = escaped;
+}
 
 // ─── Drawer button wiring ─────────────────────────────────────────────────────
 

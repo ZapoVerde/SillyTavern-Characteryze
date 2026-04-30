@@ -20,10 +20,11 @@
 
 import { promptManager } from '../../../../scripts/openai.js';
 import { log, error }      from './log.js';
-import { 
-    CTZ_BRIDGE_PROMPT_ID, 
-    CTZ_BRIDGE_PROMPT_NAME 
+import {
+    CTZ_BRIDGE_PROMPT_ID,
+    CTZ_BRIDGE_PROMPT_NAME
 } from './defaults.js';
+import { escapeMacros }    from './macro-escape.js';
 
 const TAG = 'Bridge';
 
@@ -88,7 +89,7 @@ export function publishToBridge(concatenatedString) {
     }
 
     log(TAG, 'Publishing to Bridge slot');
-    prompt.content = concatenatedString;
+    prompt.content = escapeMacros(concatenatedString);
     pm.saveServiceSettings();
 }
 
