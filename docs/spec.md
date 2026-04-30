@@ -1,255 +1,81 @@
-# Project Specification: Characteryze
-**SillyTavern Integrated Content & Prompt Generator**
+Here is the completely revised Phase 1 Specification, incorporating the "Virtual Library" (JSON settings blob) strategy and all the gap fixes we identified.
 
 ---
 
-## 1. Core Philosophy
+# Specification: Phase 1 — Virtual Library & Bridge Foundation
 
-Characteryze is a native SillyTavern extension designed to eliminate the friction of external prompt engineering by implementing a **Granular Mapping Workflow**.
+## Preamble: The Macro Project Scope
+The current ruleset subsystem relies on managing SillyTavern’s native Prompt Manager directly. It identifies user-created rulesets using a fragile regex heuristic (looking for numbers in the prompt ID) and requires a rigid, one-to-one mapping between a Forge session and a specific target ruleset. 
 
-The system operates on four principles:
+To improve robustness, data portability, and user experience, we are transitioning to a **Sync-to-Bridge Architecture** coupled with a **Librarian Workbench**.
 
-1. **Iterative Focus:** AI performs best when given small, highly specific tasks. Users generate content section-by-section.
-2. **State Isolation:** The AI operates in a sandboxed "Draft State." It can never overwrite live SillyTavern data until the user explicitly maps and commits the changes.
-3. **Native Harmony:** Characteryze reuses ST's generation pipeline, streaming UI, swipes, stop button, message editing, chat JSONL format, connection profiles, prompt manager, and preset system. It layers a tab interface and workbench on top of existing machinery rather than replacing it.
-4. **Task-Scoped Sessions:** Each Forge session is a discrete ST chat tagged as a Characteryze session. Sessions and targets are decoupled — a saved session can be loaded against any canvas target at any time.
+*   **The Source of Truth (Virtual Library):** To avoid the high friction of server plugins and messy internal file paths, rulesets will be stored natively inside the extension’s global settings JSON blob (`extension_settings.characteryze.ruleset_library`).
+*   **The Bridge:** Characteryze will no longer litter the host application with multiple prompt entries. Instead, it will manage one single entry in SillyTavern’s Prompt Manager. 
+*   **The Librarian Flow:** The Workbench will behave like a multi-document editor. Users can seamlessly switch between editing different rulesets via a dropdown without leaving their current Forge chat.
+*   **The Publishing Flow:** When a user toggles rulesets on or off, the extension concatenates the text of all active rulesets from the Virtual Library and pushes that massive string into the single Bridge slot. SillyTavern handles the token-counting and AI injection naturally.
 
----
-
-## 2. Canvas Types
-
-The user selects a canvas type when starting a new session. Each type routes through the same workflow (Forge → Workbench) but populates different target fields in the Workbench.
-
-- **Character Card** (New or Existing)
-- **System Prompt Profile** (Advanced Formatting)
-- **Ruleset** (Prompt manager entry — see Section 5)
-
-Rulesets are a first-class canvas type, not a separate management system. They are created and edited through the same Forge → Workbench pipeline as any other content.
+This specification covers **Phase 1**: Establishing the data layer (the Virtual Library) and the ST injection hook (the Bridge). No UI panels will be modified in this phase.
 
 ---
 
-## 3. Launch & Entry Point
+## 1. Modifications to Defaults (`defaults.js`)
+We must update the schema to support the new data structures.
 
-Characteryze is launched from the CTZ (Extensions) menu:
+*   Add constants:
+    *   `CTZ_BRIDGE_PROMPT_ID = 'ctz_bridge_prompt'`
+    *   `CTZ_BRIDGE_PROMPT_NAME = 'Characteryze Rulesets'`
+*   Update `DEFAULT_SETTINGS`: Add the following keys:
+    *   `ruleset_library: {}` (Dictionary of `{"Ruleset Name": "Ruleset Content Text"}`)
+    *   `active_rulesets: []` (Array of strings matching names in the library)
 
-1. Open Extensions panel
-2. Expand Characteryze entry
-3. Click Launch
+## 2. Frontend IO Adapter (`ruleset-library.js`)
+This is a new module. It isolates all reads and writes to the Virtual Library, ensuring that other modules do not mutate the `extension_settings` object directly.
 
-On launch, the tab interface overlays ST's existing UI. On exit (CTZ menu close), ST pops to the loading screen and the previous connection profile is restored.
+*   **Architectural Role:** Stateful (reads) / IO (writes)
+*   **Responsibilities:** Acts as the CRUD interface for rulesets stored in the settings JSON.
+*   **Public API:**
+    *   `getRulesetList()`: Pure. Returns `Object.keys(extension_settings[CTZ_EXT_NAME].ruleset_library)`.
+    *   `getRulesetContent(name)`: Pure. Returns the string content of the requested ruleset, or an empty string if it does not exist.
+    *   `saveRuleset(name, content)`: IO. Sets `ruleset_library[name] = content`. Calls `saveSettingsDebounced()` to persist the JSON blob to disk.
+    *   `deleteRuleset(name)`: IO. Removes the key from the dictionary and calls `saveSettingsDebounced()`.
 
----
+## 3. The Native Bridge (`prompt-bridge.js`)
+This is a new module. It is the *only* file allowed to touch SillyTavern's Prompt Manager regarding rulesets.
 
-## 4. The Interface
-
-### 4.1 Tab Bar
-
-A tab bar overlays above the ST interface, providing three views:
-
-- **Forge** — ST's native chat UI operating under the Forge connection profile
-- **Workbench** — the codeblock source navigator and field diff engine
-- **Settings** — image generation config and session management
-
-### 4.2 The Forge
-
-The Forge is ST's native chat interface operating under the Characteryze Forge connection profile. No custom chat surface is built. ST's full generation pipeline is used as-is — streaming, swipes, stop button, and message editing all work natively.
-
-- **Session Selector:** On opening, the user either starts a fresh Forge session (a new ST chat tagged as Characteryze) or loads a previously saved Forge session from the Projects list. The selected session loads as ST's active chat.
-- **Canvas & Target Selector:** Selects the canvas type (Character Card, System Prompt Profile, Ruleset) and specific target. For Character Cards, a searchable dropdown defaults to "Create New" and lists all existing characters.
-- **Ruleset Selector:** Rulesets are named prompt entries in ST's prompt manager stack, toggled on/off exactly like any other prompt entry. The Characteryze UI provides a dynamic tickable dropdown that maps directly to toggling these entries — no custom injection logic is required. ST's prompt manager handles concatenation and ordering natively.
-- **Generation:** ST's native Generate() pipeline runs against the active Forge session chat under the Forge connection profile.
-
-### 4.3 The Codeblock Scraper
-
-A background processor monitoring every completed AI reply via ST's generation events. Any text inside a codeblock (delimited by ` ``` `) is scraped by pure heuristic — no AI instruction required. Each harvested block is timestamped and stored for the Workbench source navigator. The codeblock language tag (e.g., ` ```scenario `, ` ```portrait-prompt `) is read as free metadata for Workbench target suggestions.
-
-Harvested blocks are derived on demand from the active Forge session JSONL — they are not maintained as a separate persistent data structure. The scraper re-derives the block list from the chat whenever the Workbench is opened.
-
-### 4.4 The Workbench
-
-The switchboard where raw generated blocks are mapped to SillyTavern database fields. The diff editor UI follows the **Vistalyze editor pattern** exactly — the same two-pane layout, staging action, and dirty-field tracking used across the extension suite.
-
-- **Contextual Field Dropdown:** Populates based on the active canvas type.
-  - Character Card: *Name, Description, Personality, Scenario, First Message, Avatar/Portrait, etc.*
-  - System Prompt Profile: *Main Prompt, NSFW Prompt, Jailbreak, Author's Note.*
-  - Ruleset: *Name, Content.*
-- **Source Navigator:** A scrollable list of every codeblock scraped from the current Forge session, with timestamps and language tag hints.
-- **Diff View Engine (Vistalyze pattern):**
-  - *Left Pane (Live State):* The current text of the selected target field. Read-only.
-  - *Right Pane (Draft State):* The text of the selected harvested codeblock. Fully editable before staging.
-- **Stage Action:** Aligns a harvested block with a target field. The UI marks that field as "Dirty" (pending commit).
-- **Final Commit:** Pushes the entire staged Draft State to disk using ST's native save functions. Flushes Draft State on completion.
-
-### 4.5 Settings
-
-See Section 7.
+*   **Architectural Role:** Pure (Formatting) / IO (Mutation of ST State)
+*   **Responsibilities:** Managing the `ctz_bridge_prompt` slot in the host application.
+*   **Private API:**
+    *   `_ensureBridgeExists()`: Scans SillyTavern's `promptManager` configuration. Looks for the `CTZ_BRIDGE_PROMPT_ID`. If it does not exist, it constructs a valid Prompt Manager object (Role: System, Enabled: True, Name: `CTZ_BRIDGE_PROMPT_NAME`, Content: "") and injects it.
+*   **Public API:**
+    *   `publishToBridge(concatenatedString)`: 
+        1. Checks if `promptManager` is available. If null, throws an Error: *"Rulesets require a Chat Completion backend."*
+        2. Calls `_ensureBridgeExists()`.
+        3. Locates the bridge entry in the `promptManager` and overwrites its `content` property with the provided string.
+        4. Calls `promptManager.saveServiceSettings()` to persist the prompt change to disk. *(Crucial: Do not call `saveSettingsDebounced` here; the Prompt Manager manages its own disk writes).*
 
 ---
 
-## 5. The Modular Ruleset Engine
+## Technical & Lifecycle Notices
 
-Rulesets are instruction manuals for the AI — not boilerplate content. They define *how* the AI should structure and format its output.
+**Lifecycle of `_ensureBridgeExists`**
+This function is deliberately kept private and is executed *only* when `publishToBridge` is called. It must not be called during extension initialization (`index.js`). This ensures that if a user boots SillyTavern on a Text Completion backend (where `promptManager` is null), the extension does not crash at startup.
 
-Rulesets are named entries in ST's prompt manager stack inside the Forge connection profile. They are toggled on and off via the Characteryze UI's tickable dropdown, which maps directly to ST's native prompt toggling. No custom injection, concatenation, or storage logic is required — ST's prompt manager handles all of it.
+**Migration Notice: No Automated Data Transfer**
+Existing rulesets (created by prior versions with identifiers like `ctz_ruleset_1234567890`) currently live inside ST's Prompt Manager. Phase 1 does not touch them. No automated migration script will be written. Users who wish to transition existing rulesets into the new Virtual Library will manually copy-paste them using the Librarian Workbench once Phase 2 is complete. 
 
-**Creation:** Via the Ruleset canvas type, through the same Forge → Workbench pipeline as any other content. A committed ruleset becomes a new named prompt entry in the Forge profile's prompt stack.
-
-**Discovery Loop:** Strong Forge sessions surface effective patterns. The user codifies these into a new ruleset entry so future sessions start from that baseline.
-
----
-
-## 6. The Integrated Portrait Studio
-
-- The user asks the AI in the Forge to generate a physical description and portrait prompt.
-- The AI outputs a ` ```portrait-prompt ` codeblock. The scraper captures it automatically.
-- In the Workbench, the user maps this block to the "Avatar/Portrait" target field.
-- This triggers an asynchronous call to ST's configured Image Generation API (Stable Diffusion, Pollinations, etc.).
-- The resulting image is previewed in the Workbench right pane.
-- On Final Commit, the image is attached as the `.png` or `.webp` for the Character Card.
-- Image gen prompt templates integrate PLZ-style style selectors, imported from SillyTavern-Personalyze rather than reimplemented.
+**Known Intermediate State: `rulesets-panel.js` Goes Stale**
+`rulesets-panel.js` is intentionally left unmodified in Phase 1. 
+*   It will continue to display legacy promptManager rulesets (because they pass the `/\d/` identifier filter). 
+*   Newly created rulesets saved to the Virtual Library will *not* appear in the panel yet. 
+*   The Bridge slot (`ctz_bridge_prompt`) will safely remain hidden from the panel because its identifier contains no digits. 
+*   The panel will remain functionally stale for new content until it is completely rewritten in Phase 3.
 
 ---
 
-## 7. Connection Profile Management
+## Execution & Testing Strategy
+Because Phase 1 contains no UI updates, validation will be performed entirely via the browser's developer console.
 
-### 7.1 First Load
-
-On first launch, Characteryze generates and saves the Forge connection profile from a shipped defaults file. The defaults file specifies:
-
-- Profile name ("Characteryze Forge")
-- API connection settings (endpoint, model, api_type) — sourced from the connection saved in `extension_settings`
-- Default prompt stack (base instructions, one or two example ruleset entries)
-
-The defaults file seeds the profile once and is not referenced again. The profile is thereafter owned by ST's native profile system.
-
-### 7.2 Permasave
-
-Characteryze permanently stores the user's last known non-Forge connection profile in `extension_settings` as `permasave_profile`. This is the authoritative answer to "what profile should be restored" at all times.
-
-- **Written:** Every time Characteryze opens, the current active profile is written to `permasave_profile` before swapping to the Forge profile.
-- **Never cleared:** Overwritten only on a clean Characteryze open. Self-healing — if the user changes their normal profile between sessions, the permasave updates correctly on next open.
-
-### 7.3 Profile Swap Sequence
-
-**On Characteryze open:**
-1. Write current active profile name to `permasave_profile`
-2. Swap to Forge connection profile
-3. Load selected Forge session as active chat
-
-**On Characteryze exit (CTZ menu close):**
-1. Swap to `permasave_profile`
-2. Pop ST to the loading screen
-
-### 7.4 Guard — Rogue Profile Detection
-
-Fires on every `CHAT_LOADED` event:
-
-- Is the active connection profile the Forge profile?
-- AND is the Characteryze UI not active?
-- If both true → swap to `permasave_profile`, pop to loading screen
-
-This guard handles the one failure mode the swap architecture cannot prevent: the user loading a new chat while the Forge profile is active outside of Characteryze. The guard is exempted during normal Characteryze operation by the UI-active check.
-
----
-
-## 8. Session & Project Model
-
-### 8.1 Sessions and Targets are Decoupled
-
-A Forge session (the ST chat JSONL) is independent of any canvas target. A session of strong writing can be loaded against multiple different targets — mining it for different characters or rulesets without regenerating.
-
-### 8.2 Session Identification
-
-Forge sessions are standard ST chat JSONL files identified by a metadata tag on the first message's `extra` field:
-
-```json
-{
-  "extra": {
-    "characteryze": {
-      "canvas_type": "character_card",
-      "session_name": "Sci-Fi Prison Warden"
-    }
-  }
-}
-```
-
-The Projects list is a filtered view over ST's existing chat history — all chats carrying a `characteryze` tag are surfaced as Forge sessions. No separate file store is required.
-
-### 8.3 Autosave & Session Naming
-
-Sessions autosave via ST's native autosave machinery. A lightweight one-shot LLM call generates a human-readable session name from the first user message(s), fired asynchronously after the first response completes. Session naming can be toggled off in Settings, falling back to a timestamp.
-
-### 8.4 Active Workspace Object
-
-Ephemeral working state for the current session — lives in memory, not persisted:
-
-```javascript
-active_workspace {
-  session_id:  "uuid",
-  canvas_type: "character_card" | "system_prompt" | "ruleset",
-  target:      {},          // the ST entity being edited
-  draft_state: {}           // staged field mappings, flushed on Commit
-}
-```
-
----
-
-## 9. Extension Settings
-
-```javascript
-extension_settings.characteryze {
-  permasave_profile:  "My Normal Profile",  // always current
-  forge_profile_name: "Characteryze Forge",
-  connection: {                              // used to seed first-load profile
-    api_type:  "...",
-    endpoint:  "...",
-    model:     "..."
-  },
-  image_gen: {
-    engine:   "pollinations" | "sd" | "...",
-    endpoint: "...",
-    prompt:   "..."
-  },
-  sessions: {
-    autosave:      true,
-    max_saved:     50,
-    name_generate: true
-  }
-}
-```
-
----
-
-## 10. Settings Tab
-
-| Setting | Description |
-|---|---|
-| **Image Gen Engine** | Picker for image generation backend (Pollinations, Stable Diffusion, etc.) |
-| **Image Gen Prompt** | Default prompt template. Integrates PLZ-style style selectors from SillyTavern-Personalyze. |
-| **Autosave** | Toggle. On by default. Delegates to ST's native autosave. |
-| **Max Saved Sessions** | Integer limit. Oldest sessions pruned when limit is hit. |
-| **Session Name Generation** | Toggle LLM-generated session names. Falls back to timestamp if off. |
-
----
-
-## 11. What Characteryze Is
-
-**Infrastructure layer:** Profile handler — swap, permasave, guard, first-load generation.
-
-**Product layer:**
-- Tab UI overlay (Forge / Workbench / Settings)
-- Codeblock scraper (generation event listener, source navigator)
-- Field diff engine (Vistalyze pattern — live state left pane, draft state right pane, stage, commit)
-
----
-
-## 12. What Characteryze Does Not Do
-
-- **No custom chat surface.** The Forge is ST's native chat UI.
-- **No payload interception.** No GENERATE_AFTER_DATA mutation.
-- **No custom streaming.** ST's StreamingProcessor handles all token rendering.
-- **No custom ruleset storage.** Rulesets are prompt manager entries in the Forge profile.
-- **No Clipboard Array.** Harvested blocks are derived on demand from the session JSONL.
-- **No RAG or cross-session retrieval.** Strong patterns get promoted to ruleset entries.
-- **No duplicate generation controls.** Parameters live in the Forge connection profile and ST's preset system.
-- **No mandatory system prompt.** The prompt stack is whatever entries the user has enabled. Empty selection means empty system prompt.
+1.  **Verify Virtual Library Save:** From the console, call `ruleset-library.saveRuleset('Test Rule', 'This is a test.')`. Verify no errors are thrown.
+2.  **Verify Virtual Library Read:** Refresh the page. Call `ruleset-library.getRulesetContent('Test Rule')` and verify the text persists.
+3.  **Verify Bridge Creation & Publishing:** Ensure a Chat Completion API is selected in ST. Call `prompt-bridge.publishToBridge('Bridge Test Text')`. 
+4.  **Verify ST State:** Open SillyTavern's native prompt UI (the "A" icon). Verify `Characteryze Rulesets` appears in the list, is enabled, and contains the text `Bridge Test Text`. Ensure ST did not throw a save error.

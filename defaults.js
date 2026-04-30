@@ -1,15 +1,16 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-04-29T11:30:00.000Z"}
- * @version 1.4.0
+ * @stamp {"utc":"2026-04-29T13:00:00.000Z"}
+ * @version 1.5.0
  * @architectural-role Pure — Static Configuration
  * @description
  * Seed constants for Characteryze. Defines naming conventions, canvas schemas,
  * and Pollinations API configuration. Aligned with Vistalyze for verified
- * image generation pathways.
+ * image generation pathways. Updated for Phase 1 Ruleset refactor.
  *
  * @api-declaration
  * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
+ * CTZ_BRIDGE_PROMPT_ID, CTZ_BRIDGE_PROMPT_NAME
  * CANVAS_TYPES — enum of valid canvas type strings
  * FIELD_MAPS   — per-canvas ordered field descriptors
  * POLLINATIONS_BASE_URL, POLLINATIONS_APP_KEY, POLLINATIONS_MODELS, POLLINATIONS_SECRET_KEY_NAME
@@ -31,6 +32,10 @@ export const CTZ_FORGE_PROFILE_NAME    = 'Characteryze Forge';
  * as the isolated workbench for Forge sessions.
  */
 export const CTZ_HOST_CHAR_NAME        = 'Characteryze Host';
+
+/** Phase 1: Ruleset Bridge Identifiers */
+export const CTZ_BRIDGE_PROMPT_ID      = 'ctz_bridge_prompt';
+export const CTZ_BRIDGE_PROMPT_NAME    = 'Characteryze Rulesets';
 
 export const CANVAS_TYPES = Object.freeze({
     CHARACTER_CARD:   'character_card',
@@ -110,5 +115,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
         autosave:  true,
         max_saved: 50,
     },
+    // Phase 1 Ruleset Structures
+    ruleset_library:  {},    // { [name]: content }
+    active_rulesets:  [],    // names currently enabled for bridge concatenation
     verbose: false,
 });

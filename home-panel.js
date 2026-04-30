@@ -1,15 +1,14 @@
 /**
  * @file data/default-user/extensions/characteryze/home-panel.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T14:20:00.000Z"}
+ * @version 1.1.0
  * @architectural-role IO — Home Panel UI
  * @description
- * Renders the Home tab: session list, new-session flow, canvas type selector,
- * and target picker. The Enter Forge button completes workspace configuration
- * and switches to the Forge tab so the user can chat.
+ * Renders the Home tab: session list and new-session flow.
  *
- * Delegates session creation/loading to session-manager. Delegates tab
- * switching to the activateTab callback passed to mountPanel().
+ * Refactored for Librarian Workbench (Phase 2): Ruleset initiation is now
+ * a simple gateway. Specific naming and target selection for rulesets 
+ * are handled within the Workbench itself.
  *
  * @api-declaration
  * mountPanel(container, deps) — mount panel HTML into container; deps provides
@@ -25,7 +24,6 @@
 
 import { log, error }        from './log.js';
 import { CANVAS_TYPES }      from './defaults.js';
-import { promptManager }     from '../../../../scripts/openai.js';
 import {
     listSessions,
     newForgeSession,
@@ -78,16 +76,6 @@ function _buildHTML() {
         `<option value="${_esc(c.avatar)}">${_esc(c.name)}</option>`,
     ).join('');
 
-    // ST built-in prompt identifiers are pure alphabetic/underscore strings (e.g.
-    // 'main', 'charDescription', 'world_info_before'). User-created prompts always
-    // have a digit in their identifier (timestamp or UUID). Filter on that.
-    const rulesetOptions = promptManager
-        ? (promptManager.serviceSettings?.prompts ?? [])
-            .filter(p => p.identifier && /\d/.test(p.identifier))
-            .map(p => `<option value="${_esc(p.name)}">${_esc(p.name)}</option>`)
-            .join('')
-        : '';
-
     return `
         <div class="ctz-home-panel">
             <section class="ctz-section">
@@ -112,12 +100,6 @@ function _buildHTML() {
                             <option value="__new__">— Create New —</option>
                             ${charOptions}
                         </select>
-                        <select id="ctz-target-ruleset" class="ctz-select ctz-hidden">
-                            <option value="__new__">— Create New —</option>
-                            ${rulesetOptions}
-                        </select>
-                        <input id="ctz-target-ruleset-name" class="ctz-input ctz-hidden"
-                               placeholder="New ruleset name…" />
                     </div>
                 </div>
                 <button id="ctz-new-session-btn" class="ctz-btn ctz-btn-primary">
@@ -144,25 +126,19 @@ function _wire() {
         });
     });
 
-    // Canvas type and ruleset selection drive target picker visibility
-    const canvasSelect      = _container.querySelector('#ctz-canvas-select');
-    const charSelect        = _container.querySelector('#ctz-target-char');
-    const rulesetSelect     = _container.querySelector('#ctz-target-ruleset');
-    const rulesetNameInput  = _container.querySelector('#ctz-target-ruleset-name');
-    const targetLabel       = _container.querySelector('#ctz-target-label');
+    // Canvas type drives target picker visibility
+    const canvasSelect = _container.querySelector('#ctz-canvas-select');
+    const targetRow    = _container.querySelector('#ctz-target-row');
+    const charSelect   = _container.querySelector('#ctz-target-char');
 
     function _updateTargetControls() {
         const isRuleset = canvasSelect.value === CANVAS_TYPES.RULESET;
-        charSelect?.classList.toggle('ctz-hidden', isRuleset);
-        rulesetSelect?.classList.toggle('ctz-hidden', !isRuleset);
-        if (targetLabel) targetLabel.textContent = isRuleset ? 'Ruleset' : 'Target Character';
-        // Name input only shown when creating a new ruleset
-        const isNewRuleset = isRuleset && rulesetSelect?.value === '__new__';
-        rulesetNameInput?.classList.toggle('ctz-hidden', !isNewRuleset);
+        // Ruleset canvas hides the target picker entirely on the Home tab
+        targetRow?.classList.toggle('ctz-hidden', isRuleset);
     }
 
     canvasSelect?.addEventListener('change', _updateTargetControls);
-    rulesetSelect?.addEventListener('change', _updateTargetControls);
+    _updateTargetControls(); // init visibility
 
     // New session + enter forge
     _container.querySelector('#ctz-new-session-btn')?.addEventListener('click', async () => {
@@ -171,10 +147,7 @@ function _wire() {
 
         let target;
         if (isRuleset) {
-            const selected = rulesetSelect?.value;
-            target = selected === '__new__'
-                ? (rulesetNameInput?.value.trim() || 'New Ruleset')
-                : selected;   // existing ruleset name
+            target = '__new__'; // Librarian Workbench default
         } else {
             const selected = charSelect?.value;
             target = selected === '__new__' ? null : selected;

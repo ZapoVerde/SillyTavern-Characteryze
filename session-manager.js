@@ -1,15 +1,15 @@
 /**
  * @file data/default-user/extensions/characteryze/session-manager.js
- * @stamp {"utc":"2026-04-29T10:30:00.000Z"}
- * @version 1.1.1
+ * @stamp {"utc":"2026-04-29T14:00:00.000Z"}
+ * @version 1.2.0
  * @architectural-role Stateful — Forge Session Lifecycle
  * @description
  * Owns the active workspace object and the known_sessions index. Handles
  * session creation, loading, and draft state persistence.
  *
- * Isolation is achieved by hosting all Forge sessions under a specific 
- * character defined by CTZ_HOST_CHAR_NAME. This character must be created 
- * manually by the user.
+ * Refactored for Librarian Workbench (Phase 2): supports composite draft 
+ * keys for rulesets to allow switching between multiple ruleset targets 
+ * within the same chat session without losing uncommitted work.
  *
  * @api-declaration
  * newForgeSession(canvasType, name?)    — create new chat, record session; returns entry
@@ -19,9 +19,9 @@
  * getWorkspace()                        — returns current workspace snapshot
  * setWorkspaceCanvas(canvasType)        — update canvas type
  * setWorkspaceTarget(target)            — update target entity
- * getDraftState(filename)               — returns draft fields for session
+ * getDraftState(filename)               — returns draft fields for current workspace
  * setDraftField(filename, fieldId, val) — persist one staged field
- * clearDraftState(filename)             — flush draft on commit
+ * clearDraftState(filename, target?)    — flush draft; pass pre-commit target for Save As safety
  *
  * @contract
  *   assertions:
@@ -38,6 +38,7 @@ import { log, error }                                 from './log.js';
 import {
     CTZ_EXT_NAME,
     CTZ_HOST_CHAR_NAME,
+    CANVAS_TYPES,
 } from './defaults.js';
 
 const TAG = 'Session';
@@ -77,9 +78,12 @@ export async function newForgeSession(canvasType, sessionName = null) {
         created_at:   new Date().toISOString(),
     };
 
+    // For rulesets, the default target is the "new" sentinel
+    const target = canvasType === CANVAS_TYPES.RULESET ? '__new__' : null;
+
     _recordSession(entry);
-    _workspace = { filename, canvas_type: canvasType, target: null };
-    log(TAG, 'New session:', filename);
+    _workspace = { filename, canvas_type: canvasType, target };
+    log(TAG, 'New session:', filename, '| Target:', target);
     return entry;
 }
 
@@ -103,13 +107,16 @@ export async function loadForgeSession(filename) {
         ctx.openCharacterChat(filename);
     });
 
-    const session   = _getSession(filename);
+    const session    = _getSession(filename);
+    const canvasType = session?.canvas_type ?? null;
+    const target     = canvasType === CANVAS_TYPES.RULESET ? '__new__' : null;
+
     _workspace = {
         filename,
-        canvas_type: session?.canvas_type ?? null,
-        target:      null,
+        canvas_type: canvasType,
+        target:      target,
     };
-    log(TAG, 'Session loaded:', filename);
+    log(TAG, 'Session loaded:', filename, '| Target:', target);
 }
 
 export function listSessions() {
@@ -142,20 +149,36 @@ export function setWorkspaceTarget(target) {
 
 // ─── Draft state ──────────────────────────────────────────────────────────────
 
+/**
+ * Derives the key for the draft state based on canvas type.
+ * For Rulesets, we use a composite key to allow multi-document editing.
+ */
+function _getDraftKey(filename, explicitTarget) {
+    if (_workspace.canvas_type === CANVAS_TYPES.RULESET) {
+        const target = explicitTarget !== undefined ? explicitTarget : (_workspace.target ?? '__new__');
+        return `${filename}::${target}`;
+    }
+    return filename;
+}
+
 export function getDraftState(filename) {
-    return { ...(extension_settings[CTZ_EXT_NAME]?.draft_states?.[filename] ?? {}) };
+    const key = _getDraftKey(filename);
+    return { ...(extension_settings[CTZ_EXT_NAME]?.draft_states?.[key] ?? {}) };
 }
 
 export function setDraftField(filename, fieldId, value) {
     const settings = extension_settings[CTZ_EXT_NAME];
-    if (!settings.draft_states[filename]) settings.draft_states[filename] = {};
-    settings.draft_states[filename][fieldId] = value;
+    const key = _getDraftKey(filename);
+    
+    if (!settings.draft_states[key]) settings.draft_states[key] = {};
+    settings.draft_states[key][fieldId] = value;
     saveSettingsDebounced();
 }
 
-export function clearDraftState(filename) {
+export function clearDraftState(filename, explicitTarget) {
     const settings = extension_settings[CTZ_EXT_NAME];
-    delete settings.draft_states[filename];
+    const key = _getDraftKey(filename, explicitTarget);
+    delete settings.draft_states[key];
     saveSettingsDebounced();
 }
 

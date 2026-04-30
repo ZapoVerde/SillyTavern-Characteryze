@@ -1,20 +1,34 @@
 /**
  * @file data/default-user/extensions/characteryze/rulesets-panel.js
- * @stamp {"utc":"2026-04-29T00:00:00.000Z"}
- * @version 1.0.0
- * @architectural-role IO — Rulesets Panel
+ * @stamp {"utc":"2026-04-29T15:00:00.000Z"}
+ * @version 2.0.0
+ * @architectural-role IO — Rulesets Toggle & Publishing Panel
  * @description
- * Displays all user-created prompts (identified by a digit in their identifier)
- * as a toggle list. Enables/disables them in the active character's prompt order
- * via promptManager. Replaces the former forge-strip dropdown.
+ * Displays all ruleset documents stored in the Characteryze Virtual Library.
+ * Toggling a ruleset updates the active_rulesets array, concatenates the text
+ * of all active documents, and publishes the combined string to the single 
+ * Characteryze Bridge slot in SillyTavern's native prompt manager.
+ *
+ * Reverts toggles gracefully if the user is not on a compatible Chat backend.
  *
  * @api-declaration
  * mountPanel(container) — mount panel HTML into container
  * refreshPanel()        — re-render in-place
+ *
+ * @contract
+ *   assertions:
+ *     purity: IO
+ *     state_ownership: []
+ *     external_io: [DOM, ruleset-library reads, extension_settings write, 
+ *                   saveSettingsDebounced, publishToBridge, toastr]
  */
 
-import { log, warn }   from './log.js';
-import { promptManager } from '../../../../scripts/openai.js';
+import { extension_settings }             from '../../../extensions.js';
+import { saveSettingsDebounced }          from '../../../../script.js';
+import { log, error }                     from './log.js';
+import { getRulesetList, getRulesetContent } from './ruleset-library.js';
+import { publishToBridge }                from './prompt-bridge.js';
+import { CTZ_EXT_NAME }                   from './defaults.js';
 
 const TAG = 'Rulesets';
 
@@ -40,61 +54,87 @@ function _render() {
 }
 
 function _buildHTML() {
-    const pm = promptManager;
-
-    if (!pm) {
-        return '<p class="ctz-muted">Rulesets unavailable — requires a Chat Completion backend.</p>';
+    const list = getRulesetList();
+    
+    if (list.length === 0) {
+        return `
+            <div class="ctz-section">
+                <h3 class="ctz-section-title">Rulesets</h3>
+                <p class="ctz-muted">No rulesets found. Create one via the Workbench.</p>
+            </div>
+        `;
     }
 
-    // User-created prompts have a digit in their identifier (timestamp or UUID).
-    // ST built-ins are pure alphabetic/underscore strings.
-    const ctx     = SillyTavern.getContext();
-    const prompts = (pm.serviceSettings?.prompts ?? [])
-        .filter(p => p.identifier && /\d/.test(p.identifier));
-    const order   = pm.getPromptOrderForCharacter?.(ctx.characterId) ?? [];
+    const activeList = extension_settings[CTZ_EXT_NAME]?.active_rulesets ?? [];
 
-    if (prompts.length === 0) {
-        return '<p class="ctz-muted">No user-created prompts found.</p>';
-    }
-
-    const rows = prompts.map(p => {
-        const entry   = order.find(o => o.identifier === p.identifier);
-        const enabled = entry?.enabled ?? false;
+    const rows = list.map(name => {
+        const enabled = activeList.includes(name);
         return `
             <label class="ctz-session-row" style="cursor:pointer;">
                 <input type="checkbox"
                        class="ctz-checkbox ctz-ruleset-toggle"
-                       data-identifier="${_esc(p.identifier)}"
+                       data-name="${_esc(name)}"
                        ${enabled ? 'checked' : ''} />
-                <span class="ctz-session-name">${_esc(p.name)}</span>
+                <span class="ctz-session-name">${_esc(name)}</span>
             </label>`;
     }).join('');
 
     return `
         <div class="ctz-section">
             <h3 class="ctz-section-title">Rulesets</h3>
+            <p class="ctz-muted" style="margin-bottom: 8px; font-size: 11px;">
+                Checked rulesets are combined and injected into the LLM prompt.
+            </p>
             <div class="ctz-session-list">${rows}</div>
         </div>
     `;
 }
 
+// ─── Wiring & Publishing ──────────────────────────────────────────────────────
+
 function _wire() {
     _container.querySelectorAll('.ctz-ruleset-toggle').forEach(cb => {
         cb.addEventListener('change', () => {
-            const pm = promptManager;
-            if (!pm) return;
+            const name      = cb.dataset.name;
+            const isChecked = cb.checked;
+            
+            // 1. Update State
+            const settings = extension_settings[CTZ_EXT_NAME];
+            if (!settings.active_rulesets) settings.active_rulesets = [];
+            
+            if (isChecked && !settings.active_rulesets.includes(name)) {
+                settings.active_rulesets.push(name);
+            } else if (!isChecked) {
+                settings.active_rulesets = settings.active_rulesets.filter(n => n !== name);
+            }
+            saveSettingsDebounced();
 
-            const ctx   = SillyTavern.getContext();
-            const order = pm.getPromptOrderForCharacter?.(ctx.characterId);
-            if (!order) return;
+            // 2. Concatenate
+            const concatenatedText = settings.active_rulesets
+                .map(activeName => getRulesetContent(activeName))
+                .filter(content => content && content.trim() !== '') // Drop empties/orphans
+                .join('\n\n');
 
-            const entry = order.find(o => o.identifier === cb.dataset.identifier);
-            if (entry) {
-                entry.enabled = cb.checked;
-                pm.saveServiceSettings();
-                log(TAG, `"${cb.dataset.identifier}" → ${cb.checked}`);
-            } else {
-                warn(TAG, 'Identifier not found in prompt order:', cb.dataset.identifier);
+            // 3. Publish
+            try {
+                // publishToBridge is synchronous, but we wrap in a try/catch in case it 
+                // throws an error regarding Text Completion backend incompatibility.
+                publishToBridge(concatenatedText);
+                log(TAG, `Published Library state (${settings.active_rulesets.length} active)`);
+            } catch (err) {
+                // 4. Revert on failure
+                error(TAG, 'Publish failed, reverting toggle:', err.message);
+                cb.checked = !isChecked; // UI revert
+                
+                // State revert
+                if (isChecked) {
+                    settings.active_rulesets = settings.active_rulesets.filter(n => n !== name);
+                } else {
+                    settings.active_rulesets.push(name);
+                }
+                saveSettingsDebounced();
+                
+                toastr.warning(err.message || 'Failed to apply ruleset.');
             }
         });
     });

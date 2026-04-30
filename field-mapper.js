@@ -1,16 +1,14 @@
 /**
  * @file data/default-user/extensions/characteryze/field-mapper.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T14:10:00.000Z"}
+ * @version 1.1.0
  * @architectural-role Pure (reads) / IO (commits)
  * @description
  * Provides field list derivation (pure), live state reads (pure reads from
  * ST data), and draft commit execution (IO writes to ST native save).
  *
- * Commit for character_card: POST to /api/characters/edit.
- * Commit for system_prompt: write to oai_settings fields, saveSettingsDebounced.
- * Commit for ruleset: create/update prompt manager entry.
- * Portrait field is skipped here — portrait-studio.js owns image commits.
+ * Refactored for Librarian Workbench (Phase 2): Ruleset reads and writes 
+ * are now routed to ruleset-library.js instead of SillyTavern's promptManager.
  *
  * @api-declaration
  * getFieldList(canvasType)                       — returns ordered FieldDescriptor[]
@@ -22,13 +20,15 @@
  *     purity: Pure (getFieldList, getLiveValue) / IO (commitDraftState)
  *     state_ownership: []
  *     external_io: [fetch /api/characters/edit, oai_settings write,
- *                   promptManager write, saveSettingsDebounced]
+ *                   ruleset-library write, saveSettingsDebounced]
  */
 
-import { oai_settings, promptManager } from '../../../../scripts/openai.js';
-import { saveSettingsDebounced }       from '../../../../script.js';
+import { oai_settings }          from '../../../../scripts/openai.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { log, error }            from './log.js';
 import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
+import { getRulesetContent, saveRuleset } from './ruleset-library.js';
+import { setWorkspaceTarget }    from './session-manager.js';
 
 const TAG = 'FieldMapper';
 
@@ -72,12 +72,13 @@ function _syspromptLive(fieldId) {
 }
 
 function _rulesetLive(fieldId, rulesetName) {
-    if (!promptManager) return '';
-    // V2: deeper promptManager introspection for multi-ruleset management
-    const entry = promptManager.serviceSettings?.prompts
-        ?.find(p => p.name === rulesetName);
-    if (!entry) return fieldId === 'name' ? (rulesetName ?? '') : '';
-    return fieldId === 'name' ? (entry.name ?? '') : (entry.content ?? '');
+    if (fieldId === 'name') {
+        return (rulesetName === '__new__' || !rulesetName) ? '' : rulesetName;
+    }
+    if (fieldId === 'content') {
+        return getRulesetContent(rulesetName);
+    }
+    return '';
 }
 
 // ─── IO: commit ───────────────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export async function commitDraftState(canvasType, target, draft) {
             _commitSysPrompt(draft);
             break;
         case CANVAS_TYPES.RULESET:
-            _commitRuleset(target, draft);
+            await _commitRuleset(target, draft);
             break;
         default:
             error(TAG, 'commitDraftState: unknown canvas type', canvasType);
@@ -121,7 +122,6 @@ async function _commitCharCard(avatarFilename, draft) {
         first_mes:   draft.first_mes   ?? char.data?.first_mes   ?? char.first_mes   ?? '',
         mes_example: draft.mes_example ?? char.data?.mes_example ?? char.mes_example ?? '',
     };
-    // portrait field intentionally excluded — portrait-studio.js owns image commits
 
     const resp = await fetch('/api/characters/edit', {
         method:  'POST',
@@ -151,30 +151,24 @@ function _commitSysPrompt(draft) {
     log(TAG, 'System prompt fields committed');
 }
 
-function _commitRuleset(rulesetName, draft) {
-    if (!promptManager) {
-        error(TAG, 'promptManager unavailable — ruleset commit skipped');
-        return;
-    }
-    const prompts  = promptManager.serviceSettings?.prompts ?? [];
-    const existing = prompts.find(p => p.name === rulesetName);
+async function _commitRuleset(target, draft) {
+    // Resolve name from draft fallback to target (unless target is the 'new' sentinel)
+    const name = draft.name ?? (target === '__new__' ? '' : target);
+    const content = draft.content ?? getRulesetContent(target);
 
-    if (existing) {
-        log(TAG, 'Ruleset commit: updating existing entry', { identifier: existing.identifier, name: rulesetName, draft });
-        if (draft.name)    existing.name    = draft.name;
-        if (draft.content) existing.content = draft.content;
-    } else {
-        const id      = `ctz_ruleset_${Date.now()}`;
-        const payload = { identifier: id, name: draft.name ?? rulesetName, content: draft.content ?? '', role: 'system', enabled: true };
-        log(TAG, 'Ruleset commit: creating new entry', payload);
-        promptManager.addPrompt(payload, id);
+    // Commit Guard: Reject empty names or the sentinel value
+    if (!name || name === '__new__') {
+        const err = 'Cannot commit ruleset: A valid name is required.';
+        error(TAG, err);
+        throw new Error(err);
     }
 
-    promptManager.saveServiceSettings();
+    log(TAG, 'Ruleset commit (Virtual Library):', name);
+    saveRuleset(name, content);
 
-    // Verify what is now in serviceSettings so we can confirm the save landed
-    const allAfter = promptManager.serviceSettings?.prompts ?? [];
-    log(TAG, `Rulesets in serviceSettings after save (${allAfter.length} total):`,
-        allAfter.map(p => `[${p.identifier}] ${p.name}`)
-    );
+    // If renamed (Save As behavior), sync the workspace target
+    if (name !== target) {
+        log(TAG, 'Ruleset target updated after rename:', name);
+        setWorkspaceTarget(name);
+    }
 }

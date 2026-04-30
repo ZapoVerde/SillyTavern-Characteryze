@@ -9,8 +9,8 @@
  * The strip is visible only when the Forge tab is active; it does not replace
  * the chat surface.
  *
- * The ruleset dropdown maps directly to promptManager toggle calls — no custom
- * injection. Only available on CC backends (guard against null promptManager).
+ * Displays the active canvas type and target. Updated by workbench-panel via
+ * refreshStrip() when the user switches ruleset targets or commits.
  *
  * @api-declaration
  * mountPanel(container, deps) — inject strip HTML; deps provides { getWorkspace }
@@ -20,7 +20,7 @@
  *   assertions:
  *     purity: IO
  *     state_ownership: []
- *     external_io: [DOM, promptManager toggle, SillyTavern context]
+ *     external_io: [DOM, SillyTavern context]
  */
 
 import { log }          from './log.js';
@@ -53,7 +53,7 @@ function _buildHTML() {
     const ws      = getWorkspace();
     const session = ws.filename ?? '—';
     const canvas  = ws.canvas_type ?? '—';
-    const target  = ws.target ?? (canvas === 'character_card' ? 'New Character' : '—');
+    const target  = ws.target === '__new__' ? '< New Ruleset >' : (ws.target ?? (canvas === 'character_card' ? 'New Character' : '—'));
 
     return `
         <div class="ctz-forge-strip">

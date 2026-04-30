@@ -1,18 +1,16 @@
 /**
  * @file data/default-user/extensions/characteryze/workbench-panel.js
- * @stamp {"utc":"2026-04-28T00:00:00.000Z"}
- * @version 1.0.0
+ * @stamp {"utc":"2026-04-29T14:30:00.000Z"}
+ * @version 1.1.0
  * @architectural-role IO — Workbench Diff UI
  * @description
  * Implements the two-pane diff workbench. Left pane: live state (read-only).
  * Right pane: draft state (editable). Source navigator lists scraped codeblocks.
  * Stage action marks a field dirty. Commit pushes all staged fields to disk.
  *
- * Follows the Vistalyze diff pattern exactly: same two-pane layout, stage
- * action, dirty-field tracking, and commit action via ST native save functions.
- *
- * Portrait field detection: if the selected field is "portrait", commit
- * delegates to portrait-studio.js instead of field-mapper.
+ * Refactored for Librarian Workbench (Phase 2): Rulesets now feature a 
+ * target-selection dropdown within the toolbar, allowing multi-document 
+ * editing within a single Forge session.
  *
  * @api-declaration
  * mountPanel(container, deps) — mount panel; deps provides { getWorkspace }
@@ -22,14 +20,17 @@
  *   assertions:
  *     purity: IO
  *     state_ownership: [_previewUrl]
- *     external_io: [DOM, scraper, field-mapper, portrait-studio,
- *                   session-manager draft state, toastr]
+ *     external_io: [DOM, scraper, field-mapper, portrait-studio, ruleset-library,
+ *                   session-manager draft state, forge-panel refresh, toastr]
  */
 
 import { log, error }                     from './log.js';
 import { getSessionBlocks }               from './scraper.js';
 import { getFieldList, getLiveValue, commitDraftState } from './field-mapper.js';
 import { generatePortrait, commitPortrait, revokePreview } from './portrait-studio.js';
+import { getRulesetList }                 from './ruleset-library.js';
+import { refreshStrip }                   from './forge-panel.js';
+import { refreshPanel as refreshRulesets } from './rulesets-panel.js';
 import {
     getWorkspace,
     getDraftState,
@@ -41,8 +42,6 @@ import { extension_settings }             from '../../../extensions.js';
 import { CTZ_EXT_NAME, CANVAS_TYPES }     from './defaults.js';
 
 const TAG = 'Workbench';
-
-const DEFAULT_RULESET_NAME = 'New Ruleset';
 
 let _container   = null;
 let _previewUrl  = null;   // portrait preview object URL, if any
@@ -137,10 +136,16 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
 }
 
 function _buildRulesetHTML(ws, _blocks, draft, dirtyKeys, blockItems) {
-    const isNew     = !ws.target || ws.target === DEFAULT_RULESET_NAME;
+    const isNew     = !ws.target || ws.target === '__new__';
     const nameValue = _esc(draft['name'] ?? (isNew ? '' : ws.target));
     const liveText  = _esc(getLiveValue(CANVAS_TYPES.RULESET, 'content', ws.target) ?? '');
     const draftText = _esc(draft['content'] ?? '');
+
+    // Librarian Dropdown
+    const libItems = getRulesetList();
+    const libOptions = libItems.map(name => 
+        `<option value="${_esc(name)}" ${ws.target === name ? 'selected' : ''}>${_esc(name)}</option>`
+    ).join('');
 
     return `
         <div class="ctz-workbench">
@@ -152,8 +157,12 @@ function _buildRulesetHTML(ws, _blocks, draft, dirtyKeys, blockItems) {
 
             <div class="ctz-wb-main">
                 <div class="ctz-wb-toolbar">
+                    <select id="ctz-ruleset-target-select" class="ctz-select ctz-input-sm" style="max-width:200px;">
+                        <option value="__new__" ${isNew ? 'selected' : ''}>&lt; New Ruleset &gt;</option>
+                        ${libOptions}
+                    </select>
                     <input id="ctz-ruleset-name" class="ctz-input"
-                           value="${nameValue}" placeholder="Enter Name" />
+                           value="${nameValue}" placeholder="Enter Name..." />
                     <button id="ctz-commit-btn" class="ctz-btn ctz-btn-primary"
                             ${dirtyKeys.length === 0 ? 'disabled' : ''}>
                         Commit (${dirtyKeys.length})
@@ -281,10 +290,21 @@ function _wire(ws, blocks, fields) {
 }
 
 function _wireRuleset(ws, blocks) {
-    const nameInput  = _container.querySelector('#ctz-ruleset-name');
-    const draftPane  = _container.querySelector('#ctz-draft-pane');
-    const commitBtn  = _container.querySelector('#ctz-commit-btn');
-    const refreshBtn = _container.querySelector('#ctz-wb-refresh-btn');
+    const targetSelect = _container.querySelector('#ctz-ruleset-target-select');
+    const nameInput    = _container.querySelector('#ctz-ruleset-name');
+    const draftPane    = _container.querySelector('#ctz-draft-pane');
+    const commitBtn    = _container.querySelector('#ctz-commit-btn');
+    const refreshBtn   = _container.querySelector('#ctz-wb-refresh-btn');
+
+    // Librarian Dropdown Change
+    targetSelect?.addEventListener('change', () => {
+        clearTimeout(_stageTimer);
+        const newTarget = targetSelect.value;
+        setWorkspaceTarget(newTarget);
+        refreshPanel();
+        refreshStrip(); // Sync the Forge strip display
+        log(TAG, 'Switched Ruleset target:', newTarget);
+    });
 
     // Block click → load content into draft pane
     _container.querySelectorAll('.ctz-block-item').forEach(item => {
@@ -294,7 +314,7 @@ function _wireRuleset(ws, blocks) {
         });
     });
 
-    // Name input stages immediately (short field, no debounce needed)
+    // Name input stages immediately
     nameInput?.addEventListener('input', () => {
         if (!ws.filename) return;
         setDraftField(ws.filename, 'name', nameInput.value.trim());
@@ -317,33 +337,17 @@ function _wireRuleset(ws, blocks) {
 
     commitBtn?.addEventListener('click', async () => {
         if (!ws.filename) return;
-
-        // Name validation — resolve from input → staged draft → workspace target
-        const draft      = getDraftState(ws.filename);
-        const resolvedName = (nameInput?.value.trim()) || draft['name'] || ws.target || '';
-
-        if (!resolvedName || resolvedName === DEFAULT_RULESET_NAME) {
-            toastr.warning('Enter a name for this ruleset before committing.');
-            nameInput?.focus();
-            return;
-        }
-
+        const preCommitTarget = ws.target; // snapshot before _commitRuleset may call setWorkspaceTarget
         try {
-            // Ensure the staged name reflects what we validated
-            if (resolvedName !== draft['name']) {
-                setDraftField(ws.filename, 'name', resolvedName);
-            }
             await _commitAll(ws, getDraftState(ws.filename));
-            // If the name changed, update the workspace target so live reads stay valid
-            if (resolvedName !== ws.target) {
-                setWorkspaceTarget(resolvedName);
-            }
-            clearDraftState(ws.filename);
-            toastr.success('Workbench committed.');
-            _render();
+            clearDraftState(ws.filename, preCommitTarget);
+            toastr.success('Ruleset committed.');
+            refreshPanel();    // Re-render to update the dropdown list and Live Pane
+            refreshStrip();    // Sync the Forge strip if the target name changed
+            refreshRulesets(); // Sync the Rulesets toggle panel with the new library entry
         } catch (err) {
-            error(TAG, 'Commit failed', err);
-            toastr.error('Commit failed — see console.');
+            // Error logged by field-mapper
+            toastr.warning(err.message || 'Commit failed.');
         }
     });
 }
