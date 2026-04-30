@@ -168,53 +168,6 @@
 /* ─── Home panel ─────────────────────────────────────────────────────────────── */
 .ctz-home-panel { display: flex; flex-direction: column; gap: 16px; }
 
-.ctz-session-list {
-    display:        flex;
-    flex-direction: column;
-    gap:            4px;
-    max-height:     220px;
-    overflow-y:     auto;
-}
-
-.ctz-session-item {
-    display:       flex;
-    align-items:   center;
-    gap:           8px;
-    padding:       6px 8px;
-    border-radius: var(--ctz-radius);
-    border:        1px solid var(--ctz-border);
-    cursor:        pointer;
-    transition:    border-color .15s, background .15s;
-    user-select:   none;
-}
-
-.ctz-session-item:hover          { border-color: var(--ctz-accent); }
-.ctz-session-item--selected      { border-color: var(--ctz-accent); background: rgba(137,180,250,.10); }
-
-.ctz-session-item__name {
-    flex:          1;
-    font-size:     13px;
-    overflow:      hidden;
-    text-overflow: ellipsis;
-    white-space:   nowrap;
-    outline:       none;
-    min-width:     0;
-}
-
-.ctz-session-item__name--editing {
-    white-space:   normal;
-    outline:       1px solid var(--ctz-accent);
-    border-radius: 3px;
-    padding:       0 2px;
-    user-select:   text;
-}
-
-.ctz-session-item__date {
-    font-size:   11px;
-    color:       var(--ctz-muted);
-    flex-shrink: 0;
-}
-
 .ctz-icon-btn {
     background:    transparent;
     border:        none;
@@ -228,8 +181,9 @@
     transition:    color .15s;
 }
 
-.ctz-rename-btn:hover { color: var(--ctz-accent); }
-.ctz-delete-btn:hover { color: var(--ctz-danger); }
+.ctz-icon-btn:disabled            { opacity: .35; cursor: not-allowed; }
+.ctz-rename-btn:not(:disabled):hover { color: var(--ctz-accent); }
+.ctz-delete-btn:not(:disabled):hover { color: var(--ctz-danger); }
 
 .ctz-btn-block { width: 100%; }
 

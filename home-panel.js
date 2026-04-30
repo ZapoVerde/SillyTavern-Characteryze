@@ -1,11 +1,11 @@
 /**
  * @file data/default-user/extensions/characteryze/home-panel.js
  * @stamp {"utc":"2026-04-30T00:00:00.000Z"}
- * @version 2.0.0
+ * @version 2.1.0
  * @architectural-role IO — Home Panel UI (Ignition Panel)
  * @description
  * Renders the Home tab as a decoupled Ignition Panel: an independent
- * Session picker and a Focus section (Canvas + Target) that update
+ * Session dropdown and a Focus section (Canvas + Target) that update
  * workspace state immediately on change.
  *
  * Session and Focus are orthogonal: any canvas/target combo can be used
@@ -13,12 +13,12 @@
  *
  * @api-declaration
  * mountPanel(container, deps) — mount panel; deps provides { activateTab, onEnterForge }
- * refreshPanel()              — re-render in place (preserves _selectedFilename)
+ * refreshPanel()              — re-render in place
  *
  * @contract
  *   assertions:
  *     purity: IO
- *     state_ownership: [_selectedFilename]
+ *     state_ownership: []
  *     external_io: [DOM, session-manager calls, SillyTavern context]
  */
 
@@ -36,18 +36,16 @@ import {
 
 const TAG = 'HomePanel';
 
-let _container        = null;
-let _activateTab      = null;
-let _onEnterForge     = null;
-let _selectedFilename = null; // null = New Session
+let _container    = null;
+let _activateTab  = null;
+let _onEnterForge = null;
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 
 export function mountPanel(container, deps = {}) {
-    _container        = container;
-    _activateTab      = deps.activateTab  ?? null;
-    _onEnterForge     = deps.onEnterForge ?? null;
-    _selectedFilename = null;
+    _container    = container;
+    _activateTab  = deps.activateTab  ?? null;
+    _onEnterForge = deps.onEnterForge ?? null;
     _render();
     log(TAG, 'Mounted');
 }
@@ -65,36 +63,37 @@ function _render() {
 
 function _buildHTML() {
     // Newest first
-    const sessions    = listSessions().slice().reverse();
+    const sessions     = listSessions().slice().reverse();
+    const sessionOpts  = sessions.map(s =>
+        `<option value="${_esc(s.filename)}">${_esc(s.session_name)}</option>`,
+    ).join('');
+
     const ctx         = SillyTavern.getContext();
     const charOptions = ctx.characters
         .map(c => `<option value="${_esc(c.avatar)}">${_esc(c.name)}</option>`)
         .join('');
 
-    const newSel = _selectedFilename === null ? ' ctz-session-item--selected' : '';
-
-    const sessionRows = sessions.map(s => {
-        const sel = s.filename === _selectedFilename ? ' ctz-session-item--selected' : '';
-        return `
-            <div class="ctz-session-item${sel}" data-filename="${_esc(s.filename)}">
-                <span class="ctz-session-item__name">${_esc(s.session_name)}</span>
-                <span class="ctz-session-item__date">${s.created_at.slice(0, 10)}</span>
-                <button class="ctz-icon-btn ctz-rename-btn"
-                        data-filename="${_esc(s.filename)}" title="Rename">✏</button>
-                <button class="ctz-icon-btn ctz-delete-btn"
-                        data-filename="${_esc(s.filename)}" title="Delete">🗑</button>
-            </div>`;
-    }).join('');
-
     return `
         <div class="ctz-home-panel">
             <section class="ctz-section">
                 <h3 class="ctz-section-title">Session</h3>
-                <div class="ctz-session-list" id="ctz-session-list">
-                    <div class="ctz-session-item ctz-session-item--new${newSel}" data-filename="">
-                        <span class="ctz-session-item__name">+ New Session</span>
-                    </div>
-                    ${sessionRows}
+                <div class="ctz-form-row">
+                    <label class="ctz-label">Session</label>
+                    <select id="ctz-session-select" class="ctz-select">
+                        <option value="">+ New Session</option>
+                        ${sessionOpts}
+                    </select>
+                    <button id="ctz-rename-session-btn" class="ctz-icon-btn ctz-rename-btn"
+                            title="Rename" disabled>✏</button>
+                    <button id="ctz-delete-session-btn" class="ctz-icon-btn ctz-delete-btn"
+                            title="Delete" disabled>🗑</button>
+                </div>
+                <div id="ctz-rename-row" class="ctz-form-row ctz-hidden">
+                    <label class="ctz-label"></label>
+                    <input id="ctz-rename-input" class="ctz-input" type="text"
+                           placeholder="Session name…" />
+                    <button id="ctz-rename-confirm-btn" class="ctz-icon-btn" title="Save">✓</button>
+                    <button id="ctz-rename-cancel-btn"  class="ctz-icon-btn" title="Cancel">✕</button>
                 </div>
             </section>
 
@@ -126,78 +125,60 @@ function _buildHTML() {
 // ─── Wiring ───────────────────────────────────────────────────────────────────
 
 function _wire() {
-    const canvasSelect = _container.querySelector('#ctz-canvas-select');
-    const charSelect   = _container.querySelector('#ctz-target-char');
-    const targetRow    = _container.querySelector('#ctz-target-row');
+    const sessionSelect = _container.querySelector('#ctz-session-select');
+    const renameBtn     = _container.querySelector('#ctz-rename-session-btn');
+    const deleteBtn     = _container.querySelector('#ctz-delete-session-btn');
+    const renameRow     = _container.querySelector('#ctz-rename-row');
+    const renameInput   = _container.querySelector('#ctz-rename-input');
+    const renameConfirm = _container.querySelector('#ctz-rename-confirm-btn');
+    const renameCancel  = _container.querySelector('#ctz-rename-cancel-btn');
+    const canvasSelect  = _container.querySelector('#ctz-canvas-select');
+    const charSelect    = _container.querySelector('#ctz-target-char');
+    const targetRow     = _container.querySelector('#ctz-target-row');
 
-    // ── Session selection ──────────────────────────────────────────────────────
-    _container.querySelectorAll('.ctz-session-item').forEach(item => {
-        item.addEventListener('click', e => {
-            if (e.target.closest('.ctz-icon-btn')) return;
-            _container.querySelectorAll('.ctz-session-item')
-                .forEach(i => i.classList.remove('ctz-session-item--selected'));
-            item.classList.add('ctz-session-item--selected');
-            _selectedFilename = item.dataset.filename || null;
-        });
+    // ── Session action button enable/disable ───────────────────────────────────
+    function _updateSessionActions() {
+        const hasSession = !!sessionSelect.value;
+        renameBtn.disabled = !hasSession;
+        deleteBtn.disabled = !hasSession;
+        if (!hasSession) renameRow.classList.add('ctz-hidden');
+    }
+
+    sessionSelect.addEventListener('change', _updateSessionActions);
+    _updateSessionActions();
+
+    // ── Rename ─────────────────────────────────────────────────────────────────
+    renameBtn.addEventListener('click', () => {
+        renameInput.value = sessionSelect.options[sessionSelect.selectedIndex].text;
+        renameRow.classList.remove('ctz-hidden');
+        renameInput.focus();
+        renameInput.select();
     });
 
-    // ── Rename (inline contenteditable) ───────────────────────────────────────
-    _container.querySelectorAll('.ctz-rename-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            const filename = btn.dataset.filename;
-            const row      = [..._container.querySelectorAll('.ctz-session-item')]
-                .find(el => el.dataset.filename === filename);
-            const nameSpan = row?.querySelector('.ctz-session-item__name');
-            if (!nameSpan || nameSpan.contentEditable === 'true') return;
+    function _commitRename() {
+        const filename = sessionSelect.value;
+        const newName  = renameInput.value.trim();
+        if (newName && filename) {
+            renameSession(filename, newName);
+            sessionSelect.options[sessionSelect.selectedIndex].text = newName;
+        }
+        renameRow.classList.add('ctz-hidden');
+    }
 
-            const original = nameSpan.textContent;
-            nameSpan.contentEditable = 'true';
-            nameSpan.classList.add('ctz-session-item__name--editing');
-            nameSpan.focus();
-
-            const sel   = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(nameSpan);
-            sel.removeAllRanges();
-            sel.addRange(range);
-
-            const commit = () => {
-                nameSpan.contentEditable = 'false';
-                nameSpan.classList.remove('ctz-session-item__name--editing');
-                const newName = nameSpan.textContent.trim();
-                if (newName && newName !== original) {
-                    renameSession(filename, newName);
-                } else {
-                    nameSpan.textContent = original;
-                }
-            };
-
-            nameSpan.addEventListener('blur', commit, { once: true });
-            nameSpan.addEventListener('keydown', ke => {
-                if (ke.key === 'Enter') {
-                    ke.preventDefault();
-                    nameSpan.blur();
-                }
-                if (ke.key === 'Escape') {
-                    nameSpan.removeEventListener('blur', commit);
-                    nameSpan.textContent = original;
-                    nameSpan.contentEditable = 'false';
-                    nameSpan.classList.remove('ctz-session-item__name--editing');
-                }
-            });
-        });
+    renameConfirm.addEventListener('click', _commitRename);
+    renameCancel.addEventListener('click', () => renameRow.classList.add('ctz-hidden'));
+    renameInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); _commitRename(); }
+        if (e.key === 'Escape') { renameRow.classList.add('ctz-hidden'); }
     });
 
     // ── Delete ─────────────────────────────────────────────────────────────────
-    _container.querySelectorAll('.ctz-delete-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.stopPropagation();
-            const filename = btn.dataset.filename;
-            if (_selectedFilename === filename) _selectedFilename = null;
+    deleteBtn.addEventListener('click', () => {
+        const filename = sessionSelect.value;
+        if (filename) {
             deleteSession(filename);
             refreshPanel();
-        });
+        }
     });
 
     // ── Canvas (immediate binding) ─────────────────────────────────────────────
@@ -230,15 +211,16 @@ function _wire() {
 
     // ── Enter Forge ────────────────────────────────────────────────────────────
     _container.querySelector('#ctz-enter-forge-btn')?.addEventListener('click', async () => {
+        const filename = sessionSelect.value;
         try {
-            if (_selectedFilename) {
-                await loadForgeSession(_selectedFilename);
+            if (filename) {
+                await loadForgeSession(filename);
             } else {
                 await newForgeSession();
             }
             _activateTab?.('forge');
             _onEnterForge?.();
-            log(TAG, _selectedFilename ? 'Session loaded' : 'New session started', '→ Forge');
+            log(TAG, filename ? 'Session loaded' : 'New session started', '→ Forge');
         } catch (err) {
             error(TAG, 'Enter Forge failed', err);
             toastr.error('Failed to enter Forge.');
