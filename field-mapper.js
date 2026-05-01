@@ -42,8 +42,9 @@ function _spMode() {
 }
 
 function _chatPresetByName(name) {
-    const idx = openai_setting_names.indexOf(name);
-    return idx >= 0 ? openai_settings[idx] : null;
+    // Check if the name exists as a key in the settings object
+    const idx = openai_setting_names?.[name];
+    return (idx !== undefined) ? openai_settings[idx] : null;
 }
 
 export function getFieldList(canvasType, target) {

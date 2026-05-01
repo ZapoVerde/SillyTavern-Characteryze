@@ -81,7 +81,7 @@ function _buildHTML() {
         .map(p => `<option value="${_esc(p.name)}">${_esc(p.name)}</option>`)
         .join('');
 
-    const chatProfileOptions = openai_setting_names
+    const chatProfileOptions = Object.keys(openai_setting_names || {})
         .map(n => `<option value="${_esc(n)}">${_esc(n)}</option>`)
         .join('');
 
