@@ -117,14 +117,39 @@ async function _commitCharCard(avatarFilename, draft) {
         return avatarFilename;
     }
 
+    // charaFormatData on the server starts from tryParse(json_data) || {} and then
+    // explicitly overwrites every V2 field with '' / [] if it isn't in the payload.
+    // We must pass the existing character's full JSON as json_data (so nothing is
+    // silently wiped) and echo back every field that charaFormatData touches so
+    // it receives the existing value rather than an empty-string fallback.
     const payload = {
-        avatar_url:  avatarFilename,
-        ch_name:     draft.name        ?? char.data?.name        ?? char.name,
-        description: draft.description ?? char.data?.description ?? char.description ?? '',
-        personality: draft.personality ?? char.data?.personality ?? char.personality ?? '',
-        scenario:    draft.scenario    ?? char.data?.scenario    ?? char.scenario    ?? '',
-        first_mes:   draft.first_mes   ?? char.data?.first_mes   ?? char.first_mes   ?? '',
-        mes_example: draft.mes_example ?? char.data?.mes_example ?? char.mes_example ?? '',
+        avatar_url:   avatarFilename,
+        json_data:    char.json_data ?? '',
+        // Core narrative fields — draft wins, falls back to existing
+        ch_name:      draft.name        ?? char.data?.name        ?? char.name,
+        description:  draft.description ?? char.data?.description ?? char.description ?? '',
+        personality:  draft.personality ?? char.data?.personality ?? char.personality ?? '',
+        scenario:     draft.scenario    ?? char.data?.scenario    ?? char.scenario    ?? '',
+        first_mes:    draft.first_mes   ?? char.data?.first_mes   ?? char.first_mes   ?? '',
+        mes_example:  draft.mes_example ?? char.data?.mes_example ?? char.mes_example ?? '',
+        // Lifecycle fields — must be echoed or the server overwrites with undefined
+        chat:              char.chat        ?? '',
+        create_date:       char.create_date ?? '',
+        // V2 metadata — server always overwrites these; pass existing values
+        creator_notes:     char.data?.creator_notes             ?? char.creatorcomment ?? '',
+        system_prompt:     char.data?.system_prompt             ?? '',
+        post_history_instructions: char.data?.post_history_instructions ?? '',
+        tags:              char.data?.tags                       ?? char.tags ?? [],
+        creator:           char.data?.creator                   ?? '',
+        character_version: char.data?.character_version         ?? '',
+        alternate_greetings: char.data?.alternate_greetings     ?? [],
+        // ST extension fields — charaFormatData uses string comparison for fav
+        talkativeness:  char.data?.extensions?.talkativeness ?? char.talkativeness ?? 0.5,
+        fav:            String(char.data?.extensions?.fav    ?? char.fav ?? false),
+        world:          char.data?.extensions?.world         ?? char.world ?? '',
+        depth_prompt_prompt: char.data?.extensions?.depth_prompt?.prompt ?? '',
+        depth_prompt_depth:  char.data?.extensions?.depth_prompt?.depth  ?? 4,
+        depth_prompt_role:   char.data?.extensions?.depth_prompt?.role   ?? 'system',
     };
 
     const resp = await fetch('/api/characters/edit', {

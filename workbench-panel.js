@@ -40,7 +40,7 @@ import {
     setWorkspaceTarget,
 } from './session-manager.js';
 import { extension_settings }             from '../../../extensions.js';
-import { getCharacters }                  from '../../../../script.js';
+import { getOneCharacter }                from '../../../../script.js';
 import { CTZ_EXT_NAME, CANVAS_TYPES }     from './defaults.js';
 
 const TAG = 'Workbench';
@@ -290,8 +290,8 @@ function _wire(ws, blocks, fields) {
         const draft = getDraftState(ws.filename);
         try {
             await _commitAll(ws, draft);
-            if (ws.canvas_type === CANVAS_TYPES.CHARACTER_CARD) {
-                await getCharacters();
+            if (ws.canvas_type === CANVAS_TYPES.CHARACTER_CARD && ws.target) {
+                await getOneCharacter(ws.target);
             }
             clearDraftState(ws.filename);
             toastr.success('Workbench committed.');
