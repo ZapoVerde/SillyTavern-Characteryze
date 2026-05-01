@@ -23,12 +23,13 @@
  *                   ruleset-library write, promptManager.saveServiceSettings]
  */
 
-import { promptManager }         from '../../../../scripts/openai.js';
+import { promptManager, openai_settings, openai_setting_names } from '../../../../scripts/openai.js';
 import { system_prompts }        from '../../../../scripts/sysprompt.js';
 import { getPresetManager }      from '../../../../scripts/preset-manager.js';
+import { extension_settings }    from '../../../extensions.js';
 
 import { log, error, table, isVerbose } from './log.js';
-import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
+import { CANVAS_TYPES, FIELD_MAPS, CTZ_EXT_NAME } from './defaults.js';
 import { getRulesetContent, saveRuleset } from './ruleset-library.js';
 import { setWorkspaceTarget }    from './session-manager.js';
 
@@ -36,9 +37,26 @@ const TAG = 'FieldMapper';
 
 // ─── Pure: field lists ────────────────────────────────────────────────────────
 
+function _spMode() {
+    return extension_settings[CTZ_EXT_NAME]?.sp_mode ?? 'chat';
+}
+
+function _chatPresetByName(name) {
+    const idx = openai_setting_names.indexOf(name);
+    return idx >= 0 ? openai_settings[idx] : null;
+}
+
 export function getFieldList(canvasType, target) {
     if (canvasType === CANVAS_TYPES.SYSTEM_PROMPT) {
-        if (target) {
+        const mode = _spMode();
+        if (target && mode === 'chat') {
+            return (_chatPresetByName(target)?.prompts ?? []).map(p => ({
+                id:    p.identifier,
+                label: p.name,
+                hint:  p.identifier,
+            }));
+        }
+        if (target && mode === 'text') {
             return [
                 { id: 'content',      label: 'Content',      hint: '' },
                 { id: 'post_history', label: 'Post-History', hint: '' },
@@ -58,8 +76,12 @@ export function getFieldList(canvasType, target) {
 export function getLiveValue(canvasType, fieldId, target) {
     switch (canvasType) {
         case CANVAS_TYPES.CHARACTER_CARD:   return _charLive(fieldId, target);
-        case CANVAS_TYPES.SYSTEM_PROMPT:
-            return target ? _syspromptPresetLive(fieldId, target) : _syspromptLive(fieldId);
+        case CANVAS_TYPES.SYSTEM_PROMPT: {
+            const mode = _spMode();
+            if (target && mode === 'chat')   return _chatPresetPromptLive(fieldId, target);
+            if (target && mode === 'text')   return _syspromptPresetLive(fieldId, target);
+            return _syspromptLive(fieldId);
+        }
         case CANVAS_TYPES.RULESET:          return _rulesetLive(fieldId, target);
         default:
             error(TAG, 'getLiveValue: unknown canvas type', canvasType);
@@ -83,6 +105,11 @@ function _syspromptLive(fieldId) {
 function _syspromptPresetLive(fieldId, presetName) {
     const preset = system_prompts.find(p => p.name === presetName);
     return preset?.[fieldId] ?? '';
+}
+
+function _chatPresetPromptLive(fieldId, presetName) {
+    const preset = _chatPresetByName(presetName);
+    return preset?.prompts?.find(p => p.identifier === fieldId)?.content ?? '';
 }
 
 function _rulesetLive(fieldId, rulesetName) {
@@ -132,13 +159,13 @@ export async function commitDraftState(canvasType, target, draft) {
     switch (canvasType) {
         case CANVAS_TYPES.CHARACTER_CARD:
             return await _commitCharCard(target, draft);
-        case CANVAS_TYPES.SYSTEM_PROMPT:
-            if (target) {
-                await _commitSyspromptPreset(target, draft);
-            } else {
-                _commitSysPromptList(draft);
-            }
+        case CANVAS_TYPES.SYSTEM_PROMPT: {
+            const mode = _spMode();
+            if (target && mode === 'chat')        await _commitChatPreset(target, draft);
+            else if (target && mode === 'text')   await _commitSyspromptPreset(target, draft);
+            else                                  _commitSysPromptList(draft);
             return target;
+        }
         case CANVAS_TYPES.RULESET:
             await _commitRuleset(target, draft);
             return target;
@@ -324,6 +351,39 @@ async function _commitSyspromptPreset(presetName, draft) {
     if (isVerbose()) {
         table(TAG, `commit diff · ${presetName}`,
             ['content', 'post_history'].map(f => ({ field: f, before: pre[f], after: updated[f] }))
+        );
+    }
+}
+
+function _chatPresetSnapshot(prompts, identifiers) {
+    return Object.fromEntries(
+        identifiers.map(id => {
+            const content = prompts.find(p => p.identifier === id)?.content ?? '';
+            return [id, content.split('\n')[0].slice(0, 120)];
+        })
+    );
+}
+
+async function _commitChatPreset(presetName, draft) {
+    const preset = _chatPresetByName(presetName);
+    if (!preset) throw new Error(`Chat completion preset "${presetName}" not found.`);
+
+    const prompts = preset.prompts ?? [];
+    const identifiers = Object.keys(draft);
+    const pre = isVerbose() ? _chatPresetSnapshot(prompts, identifiers) : null;
+
+    for (const [identifier, value] of Object.entries(draft)) {
+        const prompt = prompts.find(p => p.identifier === identifier);
+        if (prompt) prompt.content = value;
+    }
+
+    await getPresetManager('openai').savePreset(presetName, preset, { skipUpdate: true });
+    log(TAG, 'Chat completion preset committed:', presetName);
+
+    if (isVerbose()) {
+        const post = _chatPresetSnapshot(prompts, identifiers);
+        table(TAG, `commit diff · ${presetName}`,
+            identifiers.map(id => ({ field: id, before: pre[id], after: post[id] }))
         );
     }
 }

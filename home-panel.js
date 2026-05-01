@@ -25,6 +25,7 @@
 import { log, error }             from './log.js';
 import { CANVAS_TYPES, CTZ_EXT_NAME } from './defaults.js';
 import { system_prompts }         from '../../../../scripts/sysprompt.js';
+import { openai_setting_names }  from '../../../../scripts/openai.js';
 import { extension_settings }     from '../../../extensions.js';
 import { saveSettingsDebounced }  from '../../../../script.js';
 import {
@@ -80,6 +81,10 @@ function _buildHTML() {
         .map(p => `<option value="${_esc(p.name)}">${_esc(p.name)}</option>`)
         .join('');
 
+    const chatProfileOptions = openai_setting_names
+        .map(n => `<option value="${_esc(n)}">${_esc(n)}</option>`)
+        .join('');
+
     return `
         <div class="ctz-home-panel">
             <section class="ctz-section">
@@ -130,6 +135,9 @@ function _buildHTML() {
                     <select id="ctz-target-sysprompt" class="ctz-select ctz-hidden">
                         ${syspromptOptions}
                     </select>
+                    <select id="ctz-target-chat-profile" class="ctz-select ctz-hidden">
+                        ${chatProfileOptions}
+                    </select>
                 </div>
             </section>
 
@@ -151,12 +159,13 @@ function _wire() {
     const renameInput   = _container.querySelector('#ctz-rename-input');
     const renameConfirm = _container.querySelector('#ctz-rename-confirm-btn');
     const renameCancel  = _container.querySelector('#ctz-rename-cancel-btn');
-    const canvasSelect      = _container.querySelector('#ctz-canvas-select');
-    const spModeRow         = _container.querySelector('#ctz-sp-mode-row');
-    const spModeSelect      = _container.querySelector('#ctz-sp-mode');
-    const charSelect        = _container.querySelector('#ctz-target-char');
-    const syspromptSelect   = _container.querySelector('#ctz-target-sysprompt');
-    const targetRow         = _container.querySelector('#ctz-target-row');
+    const canvasSelect        = _container.querySelector('#ctz-canvas-select');
+    const spModeRow           = _container.querySelector('#ctz-sp-mode-row');
+    const spModeSelect        = _container.querySelector('#ctz-sp-mode');
+    const charSelect          = _container.querySelector('#ctz-target-char');
+    const syspromptSelect     = _container.querySelector('#ctz-target-sysprompt');
+    const chatProfileSelect   = _container.querySelector('#ctz-target-chat-profile');
+    const targetRow           = _container.querySelector('#ctz-target-row');
 
     // ── Session action button enable/disable ───────────────────────────────────
     function _updateSessionActions() {
@@ -208,25 +217,30 @@ function _wire() {
         const canvasType  = canvasSelect.value;
         const isCharCard  = canvasType === CANVAS_TYPES.CHARACTER_CARD;
         const isSysPrompt = canvasType === CANVAS_TYPES.SYSTEM_PROMPT;
-        const spPreset    = isSysPrompt && spModeSelect?.value === 'text';
+        const spMode      = spModeSelect?.value ?? 'chat';
+        const spText      = isSysPrompt && spMode === 'text';
+        const spChat      = isSysPrompt && spMode === 'chat';
 
         setWorkspaceCanvas(canvasType);
 
         if (isCharCard) {
             const sel = charSelect?.value;
             setWorkspaceTarget(sel === '__new__' ? null : sel);
-        } else if (spPreset) {
+        } else if (spText) {
             setWorkspaceTarget(syspromptSelect?.value || null);
+        } else if (spChat) {
+            setWorkspaceTarget(chatProfileSelect?.value || null);
         } else if (canvasType === CANVAS_TYPES.RULESET) {
             setWorkspaceTarget('__new__');
         } else {
-            setWorkspaceTarget(null); // SP prompt-list mode or unknown
+            setWorkspaceTarget(null);
         }
 
         spModeRow?.classList.toggle('ctz-hidden', !isSysPrompt);
-        targetRow?.classList.toggle('ctz-hidden', !isCharCard && !spPreset);
+        targetRow?.classList.toggle('ctz-hidden', !isCharCard && !spText && !spChat);
         charSelect?.classList.toggle('ctz-hidden', !isCharCard);
-        syspromptSelect?.classList.toggle('ctz-hidden', !spPreset);
+        syspromptSelect?.classList.toggle('ctz-hidden', !spText);
+        chatProfileSelect?.classList.toggle('ctz-hidden', !spChat);
     }
 
     canvasSelect?.addEventListener('change', _syncCanvas);
@@ -246,6 +260,11 @@ function _wire() {
     // ── Target system prompt (immediate binding) ───────────────────────────────
     syspromptSelect?.addEventListener('change', () => {
         setWorkspaceTarget(syspromptSelect.value || null);
+    });
+
+    // ── Target chat profile (immediate binding) ────────────────────────────────
+    chatProfileSelect?.addEventListener('change', () => {
+        setWorkspaceTarget(chatProfileSelect.value || null);
     });
 
     // ── Dismiss ────────────────────────────────────────────────────────────────
