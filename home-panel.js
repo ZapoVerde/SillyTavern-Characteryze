@@ -22,9 +22,11 @@
  *     external_io: [DOM, session-manager calls, SillyTavern context]
  */
 
-import { log, error }        from './log.js';
-import { CANVAS_TYPES }      from './defaults.js';
-import { system_prompts }    from '../../../../scripts/sysprompt.js';
+import { log, error }             from './log.js';
+import { CANVAS_TYPES, CTZ_EXT_NAME } from './defaults.js';
+import { system_prompts }         from '../../../../scripts/sysprompt.js';
+import { extension_settings }     from '../../../extensions.js';
+import { saveSettingsDebounced }  from '../../../../script.js';
 import {
     listSessions,
     newForgeSession,
@@ -115,8 +117,8 @@ function _buildHTML() {
                 <div class="ctz-form-row ctz-hidden" id="ctz-sp-mode-row">
                     <label class="ctz-label">Mode</label>
                     <select id="ctz-sp-mode" class="ctz-select">
-                        <option value="preset">Preset</option>
-                        <option value="prompts">Prompt List</option>
+                        <option value="chat" ${_spMode() === 'chat' ? 'selected' : ''}>Chat Completion</option>
+                        <option value="text" ${_spMode() === 'text' ? 'selected' : ''}>Text Completion</option>
                     </select>
                 </div>
                 <div class="ctz-form-row" id="ctz-target-row">
@@ -206,7 +208,7 @@ function _wire() {
         const canvasType  = canvasSelect.value;
         const isCharCard  = canvasType === CANVAS_TYPES.CHARACTER_CARD;
         const isSysPrompt = canvasType === CANVAS_TYPES.SYSTEM_PROMPT;
-        const spPreset    = isSysPrompt && spModeSelect?.value === 'preset';
+        const spPreset    = isSysPrompt && spModeSelect?.value === 'text';
 
         setWorkspaceCanvas(canvasType);
 
@@ -228,7 +230,11 @@ function _wire() {
     }
 
     canvasSelect?.addEventListener('change', _syncCanvas);
-    spModeSelect?.addEventListener('change', _syncCanvas);
+    spModeSelect?.addEventListener('change', () => {
+        extension_settings[CTZ_EXT_NAME].sp_mode = spModeSelect.value;
+        saveSettingsDebounced();
+        _syncCanvas();
+    });
     _syncCanvas(); // initialise workspace state + row visibility
 
     // ── Target character (immediate binding) ───────────────────────────────────
@@ -273,6 +279,10 @@ function _wire() {
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
+
+function _spMode() {
+    return extension_settings[CTZ_EXT_NAME]?.sp_mode ?? 'chat';
+}
 
 function _esc(str) {
     return String(str ?? '').replace(/[&<>"']/g, c => ({
