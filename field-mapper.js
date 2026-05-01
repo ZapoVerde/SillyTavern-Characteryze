@@ -63,11 +63,13 @@ export function getFieldList(canvasType, target) {
                 { id: 'post_history', label: 'Post-History', hint: '' },
             ];
         }
-        return (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
-            id:    p.identifier,
-            label: p.name,
-            hint:  p.identifier,
-        }));
+        return (promptManager?.serviceSettings?.prompts ?? [])
+            .filter(p => p && p.marker !== true) // This removes the data placeholders
+            .map(p => ({
+                id:    p.identifier,
+                label: p.name,
+                hint:  p.identifier,
+            }));
     }
     return FIELD_MAPS[canvasType] ?? [];
 }
