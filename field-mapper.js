@@ -113,7 +113,7 @@ export async function commitDraftState(canvasType, target, draft) {
         log(TAG, 'commitDraftState: nothing to commit');
         return target;
     }
-    log(TAG, 'Committing draft', { canvasType, target, fields: Object.keys(draft) });
+    log(TAG, 'Committing draft', { canvasType, target, draft });
 
     switch (canvasType) {
         case CANVAS_TYPES.CHARACTER_CARD:
@@ -151,6 +151,12 @@ async function _commitCharCard(avatarFilename, draft) {
     const char = await charResp.json();
     const pre  = isVerbose() ? _charSnapshot(char) : null;
 
+    // ST has no per-field update — /edit always writes the full character object.
+    // staged() simulates a patch: a draft value only wins if it is non-empty.
+    // '' in the draft (e.g. a field that was auto-staged before the user typed)
+    // defers to the fresh card value so it is never accidentally cleared.
+    const staged = (draftVal, cardVal) => (draftVal != null && draftVal !== '') ? draftVal : cardVal;
+
     // charaFormatData on the server starts from tryParse(json_data) || {} and then
     // explicitly overwrites every V2 field with '' / [] if it isn't in the payload.
     // We must pass the existing character's full JSON as json_data (so nothing is
@@ -159,13 +165,13 @@ async function _commitCharCard(avatarFilename, draft) {
     const payload = {
         avatar_url:   avatarFilename,
         json_data:    char.json_data ?? '',
-        // Core narrative fields — draft wins, falls back to existing
-        ch_name:      draft.name        ?? char.data?.name        ?? char.name,
-        description:  draft.description ?? char.data?.description ?? char.description ?? '',
-        personality:  draft.personality ?? char.data?.personality ?? char.personality ?? '',
-        scenario:     draft.scenario    ?? char.data?.scenario    ?? char.scenario    ?? '',
-        first_mes:    draft.first_mes   ?? char.data?.first_mes   ?? char.first_mes   ?? '',
-        mes_example:  draft.mes_example ?? char.data?.mes_example ?? char.mes_example ?? '',
+        // Core narrative fields — non-empty draft wins; empty draft defers to card
+        ch_name:      staged(draft.name,        char.data?.name        ?? char.name),
+        description:  staged(draft.description, char.data?.description ?? char.description ?? ''),
+        personality:  staged(draft.personality, char.data?.personality ?? char.personality ?? ''),
+        scenario:     staged(draft.scenario,    char.data?.scenario    ?? char.scenario    ?? ''),
+        first_mes:    staged(draft.first_mes,   char.data?.first_mes   ?? char.first_mes   ?? ''),
+        mes_example:  staged(draft.mes_example, char.data?.mes_example ?? char.mes_example ?? ''),
         // Lifecycle fields — must be echoed or the server overwrites with undefined
         chat:              char.chat        ?? '',
         create_date:       char.create_date ?? '',

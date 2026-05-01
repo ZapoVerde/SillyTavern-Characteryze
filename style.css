@@ -384,11 +384,19 @@
 }
 
 .ctz-pane-header {
-    font-size:   11px;
-    color:       var(--ctz-muted);
-    margin-bottom: 4px;
+    display:        flex;
+    align-items:    center;
+    justify-content: space-between;
+    font-size:      11px;
+    color:          var(--ctz-muted);
+    margin-bottom:  4px;
     text-transform: uppercase;
     letter-spacing: .04em;
+}
+
+.ctz-pane-header-actions {
+    display: flex;
+    gap:     4px;
 }
 
 .ctz-pane-text {

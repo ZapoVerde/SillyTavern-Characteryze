@@ -37,6 +37,7 @@ import {
     getDraftState,
     setDraftField,
     clearDraftState,
+    removeDraftField,
     setWorkspaceTarget,
 } from './session-manager.js';
 import { extension_settings }             from '../../../extensions.js';
@@ -130,7 +131,13 @@ function _buildHTML(ws, blocks, fields, draft, dirtyKeys) {
                                   readonly>${_esc(liveText)}</textarea>
                     </div>
                     <div class="ctz-pane ctz-pane-draft">
-                        <div class="ctz-pane-header">Draft</div>
+                        <div class="ctz-pane-header">
+                            Draft
+                            <div class="ctz-pane-header-actions">
+                                <button id="ctz-copydown-btn" class="ctz-btn ctz-btn-sm" title="Copy live state into draft">↓ Copy down</button>
+                                <button id="ctz-clear-btn"    class="ctz-btn ctz-btn-sm" title="Clear draft">✕ Clear</button>
+                            </div>
+                        </div>
                         <textarea class="ctz-pane-text" id="ctz-draft-pane">${_esc(draftText)}</textarea>
                     </div>
                 </div>
@@ -186,7 +193,13 @@ function _buildRulesetHTML(ws, _blocks, draft, dirtyKeys, blockItems) {
                                   readonly>${liveText}</textarea>
                     </div>
                     <div class="ctz-pane ctz-pane-draft">
-                        <div class="ctz-pane-header">Draft</div>
+                        <div class="ctz-pane-header">
+                            Draft
+                            <div class="ctz-pane-header-actions">
+                                <button id="ctz-copydown-btn" class="ctz-btn ctz-btn-sm" title="Copy live state into draft">↓ Copy down</button>
+                                <button id="ctz-clear-btn"    class="ctz-btn ctz-btn-sm" title="Clear draft">✕ Clear</button>
+                            </div>
+                        </div>
                         <textarea class="ctz-pane-text" id="ctz-draft-pane">${draftText}</textarea>
                     </div>
                 </div>
@@ -213,8 +226,37 @@ function _wire(ws, blocks, fields) {
     const draftPane    = _container.querySelector('#ctz-draft-pane');
     const commitBtn    = _container.querySelector('#ctz-commit-btn');
     const refreshBtn   = _container.querySelector('#ctz-wb-refresh-btn');
+    const copydownBtn  = _container.querySelector('#ctz-copydown-btn');
+    const clearBtn     = _container.querySelector('#ctz-clear-btn');
     const portraitArea = _container.querySelector('#ctz-portrait-preview-area');
     const genBtn       = _container.querySelector('#ctz-gen-portrait-btn');
+
+    copydownBtn?.addEventListener('click', () => {
+        if (!livePane || !draftPane) return;
+        draftPane.value = livePane.value;
+        draftPane.dispatchEvent(new Event('input'));
+        log(TAG, 'Copied live → draft for field:', fieldSelect?.value);
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        const fieldId = fieldSelect?.value;
+        if (!ws.filename || !fieldId) return;
+        clearTimeout(_stageTimer);
+        _stageTimer = null;
+        draftPane.value = '';
+        removeDraftField(ws.filename, fieldId);
+        const dirtyCount = Object.keys(getDraftState(ws.filename)).length;
+        if (commitBtn) {
+            commitBtn.disabled    = dirtyCount === 0;
+            commitBtn.textContent = `Commit (${dirtyCount})`;
+        }
+        const opt = fieldSelect?.querySelector(`option[value="${CSS.escape(fieldId)}"]`);
+        if (opt) {
+            opt.removeAttribute('data-dirty');
+            opt.textContent = opt.textContent.replace(' ●', '').trimEnd();
+        }
+        log(TAG, 'Draft cleared for field:', fieldId);
+    });
 
     // Clicking a block loads it into the draft pane
     _container.querySelectorAll('.ctz-block-item').forEach(item => {
@@ -331,8 +373,32 @@ function _wireRuleset(ws, blocks) {
     const targetSelect = _container.querySelector('#ctz-ruleset-target-select');
     const nameInput    = _container.querySelector('#ctz-ruleset-name');
     const draftPane    = _container.querySelector('#ctz-draft-pane');
+    const livePane     = _container.querySelector('#ctz-live-pane');
     const commitBtn    = _container.querySelector('#ctz-commit-btn');
     const refreshBtn   = _container.querySelector('#ctz-wb-refresh-btn');
+    const copydownBtn  = _container.querySelector('#ctz-copydown-btn');
+    const clearBtn     = _container.querySelector('#ctz-clear-btn');
+
+    copydownBtn?.addEventListener('click', () => {
+        if (!livePane || !draftPane) return;
+        draftPane.value = livePane.value;
+        draftPane.dispatchEvent(new Event('input'));
+        log(TAG, 'Copied live → draft (ruleset content)');
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        if (!ws.filename) return;
+        clearTimeout(_stageTimer);
+        _stageTimer = null;
+        draftPane.value = '';
+        removeDraftField(ws.filename, 'content');
+        const dirtyCount = Object.keys(getDraftState(ws.filename)).length;
+        if (commitBtn) {
+            commitBtn.disabled    = dirtyCount === 0;
+            commitBtn.textContent = `Commit (${dirtyCount})`;
+        }
+        log(TAG, 'Draft cleared (ruleset content)');
+    });
 
     // Librarian Dropdown Change
     targetSelect?.addEventListener('change', () => {

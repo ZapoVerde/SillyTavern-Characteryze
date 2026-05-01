@@ -188,6 +188,15 @@ export function clearDraftState(filename, explicitTarget) {
     saveSettingsDebounced();
 }
 
+export function removeDraftField(filename, fieldId) {
+    const settings = extension_settings[CTZ_EXT_NAME];
+    const key = _getDraftKey(filename);
+    if (settings.draft_states?.[key]) {
+        delete settings.draft_states[key][fieldId];
+        saveSettingsDebounced();
+    }
+}
+
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 function _findInternalCharIdx() {
