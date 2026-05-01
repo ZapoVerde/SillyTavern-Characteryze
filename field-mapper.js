@@ -25,7 +25,7 @@
 
 import { promptManager }         from '../../../../scripts/openai.js';
 
-import { log, error }            from './log.js';
+import { log, error, table, isVerbose } from './log.js';
 import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
 import { getRulesetContent, saveRuleset } from './ruleset-library.js';
 import { setWorkspaceTarget }    from './session-manager.js';
@@ -81,6 +81,31 @@ function _rulesetLive(fieldId, rulesetName) {
     return '';
 }
 
+// ─── Debug helpers ────────────────────────────────────────────────────────────
+
+function _charSnapshot(char) {
+    const d = char.data ?? {};
+    const ext = d.extensions ?? {};
+    return {
+        name:                      d.name                      ?? char.name                      ?? '',
+        description:               d.description               ?? char.description               ?? '',
+        personality:               d.personality               ?? char.personality               ?? '',
+        scenario:                  d.scenario                  ?? char.scenario                  ?? '',
+        first_mes:                 d.first_mes                 ?? char.first_mes                 ?? '',
+        mes_example:               d.mes_example               ?? char.mes_example               ?? '',
+        creator_notes:             d.creator_notes             ?? char.creatorcomment             ?? '',
+        system_prompt:             d.system_prompt             ?? '',
+        post_history_instructions: d.post_history_instructions ?? '',
+        tags:                      d.tags                      ?? char.tags                      ?? [],
+        creator:                   d.creator                   ?? '',
+        character_version:         d.character_version         ?? '',
+        alternate_greetings:       d.alternate_greetings       ?? [],
+        talkativeness:             ext.talkativeness           ?? char.talkativeness             ?? 0.5,
+        fav:                       ext.fav                     ?? char.fav                       ?? false,
+        world:                     ext.world                   ?? char.world                     ?? '',
+    };
+}
+
 // ─── IO: commit ───────────────────────────────────────────────────────────────
 
 export async function commitDraftState(canvasType, target, draft) {
@@ -110,12 +135,21 @@ async function _commitCharCard(avatarFilename, draft) {
         return await _createCharCard(draft);
     }
 
-    const ctx  = SillyTavern.getContext();
-    const char = ctx.characters.find(c => c.avatar === avatarFilename);
-    if (!char) {
-        error(TAG, 'Character not found for commit:', avatarFilename);
-        return avatarFilename;
+    const ctx = SillyTavern.getContext();
+
+    // Fresh fetch — do not trust ctx.characters cache, which may not reflect the
+    // last commit if getOneCharacter failed silently (avatar mismatch, etc.).
+    const charResp = await fetch('/api/characters/get', {
+        method:  'POST',
+        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ avatar_url: avatarFilename }),
+    });
+    if (!charResp.ok) {
+        error(TAG, 'Failed to fetch fresh character data for commit:', charResp.status);
+        throw new Error('Could not verify current character state before saving.');
     }
+    const char = await charResp.json();
+    const pre  = isVerbose() ? _charSnapshot(char) : null;
 
     // charaFormatData on the server starts from tryParse(json_data) || {} and then
     // explicitly overwrites every V2 field with '' / [] if it isn't in the payload.
@@ -163,6 +197,21 @@ async function _commitCharCard(avatarFilename, draft) {
         throw new Error(`Character edit failed: ${resp.status}`);
     }
     log(TAG, 'Character card committed:', avatarFilename);
+
+    if (isVerbose()) {
+        const postResp = await fetch('/api/characters/get', {
+            method:  'POST',
+            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ avatar_url: avatarFilename }),
+        });
+        if (postResp.ok) {
+            const post = _charSnapshot(await postResp.json());
+            table(TAG, `commit diff · ${avatarFilename}`,
+                Object.keys(pre).map(f => ({ field: f, before: pre[f], after: post[f] }))
+            );
+        }
+    }
+
     return avatarFilename;
 }
 

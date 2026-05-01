@@ -287,18 +287,25 @@ function _wire(ws, blocks, fields) {
         e.preventDefault();
         e.stopPropagation();
         if (!ws.filename) return;
-        const draft = getDraftState(ws.filename);
+
+        const draft       = getDraftState(ws.filename);
+        const btnOrigText = commitBtn.textContent;
+        commitBtn.disabled    = true;
+        commitBtn.textContent = 'Committing...';
+
         try {
             await _commitAll(ws, draft);
             if (ws.canvas_type === CANVAS_TYPES.CHARACTER_CARD && ws.target) {
                 await getOneCharacter(ws.target);
             }
             clearDraftState(ws.filename);
-            toastr.success('Workbench committed.');
+            toastr.success('Workbench committed and saved to card.');
             _render();
         } catch (err) {
             error(TAG, 'Commit failed', err);
-            toastr.error('Commit failed — see console.');
+            toastr.error('Commit failed. Your changes are still in the draft.');
+            commitBtn.disabled    = false;
+            commitBtn.textContent = btnOrigText;
         }
     });
 

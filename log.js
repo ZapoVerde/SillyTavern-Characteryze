@@ -11,11 +11,12 @@
  * Entries are prefixed [CTZ:Tag] for easy filtering.
  *
  * @api-declaration
- * log(tag, ...args)    — verbose-gated informational output.
- * warn(tag, ...args)   — verbose-gated warning output.
- * error(tag, ...args)  — always-on error output.
- * setVerbose(enabled)  — toggle verbose mode at runtime.
- * isVerbose()          — returns current verbose state.
+ * log(tag, ...args)         — verbose-gated informational output.
+ * warn(tag, ...args)        — verbose-gated warning output.
+ * error(tag, ...args)       — always-on error output.
+ * table(tag, label, rows)   — verbose-gated console.table with an expanded group header.
+ * setVerbose(enabled)       — toggle verbose mode at runtime.
+ * isVerbose()               — returns current verbose state.
  *
  * @contract
  *   assertions:
@@ -49,6 +50,15 @@ export function warn(tag, ...args) {
 
 export function error(tag, ...args) {
     _output(console.error.bind(console), tag, args);
+}
+
+// Renders rows as an expanded console.table — ideal for before/after snapshots.
+// rows: array of plain objects, all sharing the same keys (become columns).
+export function table(tag, label, rows) {
+    if (!_verbose) return;
+    console.group(`[CTZ:${tag}] ${label}`);
+    console.table(rows);
+    console.groupEnd();
 }
 
 export function setVerbose(enabled) {
