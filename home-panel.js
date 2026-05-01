@@ -112,6 +112,13 @@ function _buildHTML() {
                         <option value="${CANVAS_TYPES.RULESET}">Ruleset</option>
                     </select>
                 </div>
+                <div class="ctz-form-row ctz-hidden" id="ctz-sp-mode-row">
+                    <label class="ctz-label">Mode</label>
+                    <select id="ctz-sp-mode" class="ctz-select">
+                        <option value="preset">Preset</option>
+                        <option value="prompts">Prompt List</option>
+                    </select>
+                </div>
                 <div class="ctz-form-row" id="ctz-target-row">
                     <label class="ctz-label">Target</label>
                     <select id="ctz-target-char" class="ctz-select">
@@ -143,6 +150,8 @@ function _wire() {
     const renameConfirm = _container.querySelector('#ctz-rename-confirm-btn');
     const renameCancel  = _container.querySelector('#ctz-rename-cancel-btn');
     const canvasSelect      = _container.querySelector('#ctz-canvas-select');
+    const spModeRow         = _container.querySelector('#ctz-sp-mode-row');
+    const spModeSelect      = _container.querySelector('#ctz-sp-mode');
     const charSelect        = _container.querySelector('#ctz-target-char');
     const syspromptSelect   = _container.querySelector('#ctz-target-sysprompt');
     const targetRow         = _container.querySelector('#ctz-target-row');
@@ -192,32 +201,35 @@ function _wire() {
         }
     });
 
-    // ── Canvas (immediate binding) ─────────────────────────────────────────────
+    // ── Canvas / SP-mode (immediate binding) ──────────────────────────────────
     function _syncCanvas() {
         const canvasType  = canvasSelect.value;
         const isCharCard  = canvasType === CANVAS_TYPES.CHARACTER_CARD;
         const isSysPrompt = canvasType === CANVAS_TYPES.SYSTEM_PROMPT;
+        const spPreset    = isSysPrompt && spModeSelect?.value === 'preset';
 
         setWorkspaceCanvas(canvasType);
 
         if (isCharCard) {
             const sel = charSelect?.value;
             setWorkspaceTarget(sel === '__new__' ? null : sel);
-        } else if (isSysPrompt) {
+        } else if (spPreset) {
             setWorkspaceTarget(syspromptSelect?.value || null);
         } else if (canvasType === CANVAS_TYPES.RULESET) {
             setWorkspaceTarget('__new__');
         } else {
-            setWorkspaceTarget(null);
+            setWorkspaceTarget(null); // SP prompt-list mode or unknown
         }
 
-        targetRow?.classList.toggle('ctz-hidden', !isCharCard && !isSysPrompt);
+        spModeRow?.classList.toggle('ctz-hidden', !isSysPrompt);
+        targetRow?.classList.toggle('ctz-hidden', !isCharCard && !spPreset);
         charSelect?.classList.toggle('ctz-hidden', !isCharCard);
-        syspromptSelect?.classList.toggle('ctz-hidden', !isSysPrompt);
+        syspromptSelect?.classList.toggle('ctz-hidden', !spPreset);
     }
 
     canvasSelect?.addEventListener('change', _syncCanvas);
-    _syncCanvas(); // initialise workspace state + target row visibility
+    spModeSelect?.addEventListener('change', _syncCanvas);
+    _syncCanvas(); // initialise workspace state + row visibility
 
     // ── Target character (immediate binding) ───────────────────────────────────
     charSelect?.addEventListener('change', () => {

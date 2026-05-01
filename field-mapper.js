@@ -24,6 +24,8 @@
  */
 
 import { promptManager }         from '../../../../scripts/openai.js';
+import { system_prompts }        from '../../../../scripts/sysprompt.js';
+import { getPresetManager }      from '../../../../scripts/preset-manager.js';
 
 import { log, error, table, isVerbose } from './log.js';
 import { CANVAS_TYPES, FIELD_MAPS } from './defaults.js';
@@ -34,8 +36,14 @@ const TAG = 'FieldMapper';
 
 // ─── Pure: field lists ────────────────────────────────────────────────────────
 
-export function getFieldList(canvasType) {
+export function getFieldList(canvasType, target) {
     if (canvasType === CANVAS_TYPES.SYSTEM_PROMPT) {
+        if (target) {
+            return [
+                { id: 'content',      label: 'Content',      hint: '' },
+                { id: 'post_history', label: 'Post-History', hint: '' },
+            ];
+        }
         return (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
             id:    p.identifier,
             label: p.name,
@@ -50,7 +58,8 @@ export function getFieldList(canvasType) {
 export function getLiveValue(canvasType, fieldId, target) {
     switch (canvasType) {
         case CANVAS_TYPES.CHARACTER_CARD:   return _charLive(fieldId, target);
-        case CANVAS_TYPES.SYSTEM_PROMPT:    return _syspromptLive(fieldId);
+        case CANVAS_TYPES.SYSTEM_PROMPT:
+            return target ? _syspromptPresetLive(fieldId, target) : _syspromptLive(fieldId);
         case CANVAS_TYPES.RULESET:          return _rulesetLive(fieldId, target);
         default:
             error(TAG, 'getLiveValue: unknown canvas type', canvasType);
@@ -69,6 +78,11 @@ function _charLive(fieldId, avatarFilename) {
 function _syspromptLive(fieldId) {
     const prompts = promptManager?.serviceSettings?.prompts ?? [];
     return prompts.find(p => p.identifier === fieldId)?.content ?? '';
+}
+
+function _syspromptPresetLive(fieldId, presetName) {
+    const preset = system_prompts.find(p => p.name === presetName);
+    return preset?.[fieldId] ?? '';
 }
 
 function _rulesetLive(fieldId, rulesetName) {
@@ -119,7 +133,11 @@ export async function commitDraftState(canvasType, target, draft) {
         case CANVAS_TYPES.CHARACTER_CARD:
             return await _commitCharCard(target, draft);
         case CANVAS_TYPES.SYSTEM_PROMPT:
-            _commitSysPrompt(draft);
+            if (target) {
+                await _commitSyspromptPreset(target, draft);
+            } else {
+                _commitSysPromptList(draft);
+            }
             return target;
         case CANVAS_TYPES.RULESET:
             await _commitRuleset(target, draft);
@@ -264,7 +282,7 @@ function _syspromptSnapshot(prompts, identifiers) {
     );
 }
 
-function _commitSysPrompt(draft) {
+function _commitSysPromptList(draft) {
     const pm = promptManager;
     if (!pm) return;
     const prompts = pm.serviceSettings?.prompts ?? [];
@@ -277,12 +295,35 @@ function _commitSysPrompt(draft) {
         if (prompt) prompt.content = value;
     }
     pm.saveServiceSettings();
-    log(TAG, 'System prompt fields committed');
+    log(TAG, 'System prompt list committed');
 
     if (isVerbose()) {
         const post = _syspromptSnapshot(prompts, identifiers);
         table(TAG, 'commit diff · system prompts',
             identifiers.map(id => ({ field: id, before: pre[id], after: post[id] }))
+        );
+    }
+}
+
+async function _commitSyspromptPreset(presetName, draft) {
+    const existing = system_prompts.find(p => p.name === presetName);
+    if (!existing) throw new Error(`Sysprompt preset "${presetName}" not found.`);
+
+    const pre = isVerbose() ? { content: existing.content, post_history: existing.post_history } : null;
+
+    const updated = {
+        name:         presetName,
+        content:      draft.content      ?? existing.content      ?? '',
+        post_history: draft.post_history ?? existing.post_history ?? '',
+    };
+
+    await getPresetManager('sysprompt').savePreset(presetName, updated, { skipUpdate: true });
+    Object.assign(existing, updated);
+    log(TAG, 'Sysprompt preset committed:', presetName);
+
+    if (isVerbose()) {
+        table(TAG, `commit diff · ${presetName}`,
+            ['content', 'post_history'].map(f => ({ field: f, before: pre[f], after: updated[f] }))
         );
     }
 }
