@@ -24,7 +24,7 @@
 
 import { log, error }        from './log.js';
 import { CANVAS_TYPES }      from './defaults.js';
-import { getFieldList }      from './field-mapper.js';
+import { system_prompts }    from '../../../../scripts/sysprompt.js';
 import {
     listSessions,
     newForgeSession,
@@ -74,8 +74,8 @@ function _buildHTML() {
         .map(c => `<option value="${_esc(c.avatar)}">${_esc(c.name)}</option>`)
         .join('');
 
-    const syspromptOptions = getFieldList(CANVAS_TYPES.SYSTEM_PROMPT)
-        .map(p => `<option value="${_esc(p.id)}">${_esc(p.label)}</option>`)
+    const syspromptOptions = system_prompts
+        .map(p => `<option value="${_esc(p.name)}">${_esc(p.name)}</option>`)
         .join('');
 
     return `

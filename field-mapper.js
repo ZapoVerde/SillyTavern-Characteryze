@@ -34,14 +34,13 @@ const TAG = 'FieldMapper';
 
 // ─── Pure: field lists ────────────────────────────────────────────────────────
 
-export function getFieldList(canvasType, target) {
+export function getFieldList(canvasType) {
     if (canvasType === CANVAS_TYPES.SYSTEM_PROMPT) {
-        const all = (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
+        return (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
             id:    p.identifier,
             label: p.name,
             hint:  p.identifier,
         }));
-        return target ? all.filter(f => f.id === target) : all;
     }
     return FIELD_MAPS[canvasType] ?? [];
 }
