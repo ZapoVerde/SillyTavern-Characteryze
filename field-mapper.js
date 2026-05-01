@@ -34,13 +34,14 @@ const TAG = 'FieldMapper';
 
 // ─── Pure: field lists ────────────────────────────────────────────────────────
 
-export function getFieldList(canvasType) {
+export function getFieldList(canvasType, target) {
     if (canvasType === CANVAS_TYPES.SYSTEM_PROMPT) {
-        return (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
+        const all = (promptManager?.serviceSettings?.prompts ?? []).map(p => ({
             id:    p.identifier,
             label: p.name,
             hint:  p.identifier,
         }));
+        return target ? all.filter(f => f.id === target) : all;
     }
     return FIELD_MAPS[canvasType] ?? [];
 }
@@ -258,16 +259,33 @@ async function _createCharCard(draft) {
     return newAvatar;
 }
 
+function _syspromptSnapshot(prompts, identifiers) {
+    return Object.fromEntries(
+        identifiers.map(id => [id, prompts.find(p => p.identifier === id)?.content ?? ''])
+    );
+}
+
 function _commitSysPrompt(draft) {
     const pm = promptManager;
     if (!pm) return;
     const prompts = pm.serviceSettings?.prompts ?? [];
+
+    const identifiers = Object.keys(draft);
+    const pre = isVerbose() ? _syspromptSnapshot(prompts, identifiers) : null;
+
     for (const [identifier, value] of Object.entries(draft)) {
         const prompt = prompts.find(p => p.identifier === identifier);
         if (prompt) prompt.content = value;
     }
     pm.saveServiceSettings();
     log(TAG, 'System prompt fields committed');
+
+    if (isVerbose()) {
+        const post = _syspromptSnapshot(prompts, identifiers);
+        table(TAG, 'commit diff · system prompts',
+            identifiers.map(id => ({ field: id, before: pre[id], after: post[id] }))
+        );
+    }
 }
 
 async function _commitRuleset(target, draft) {

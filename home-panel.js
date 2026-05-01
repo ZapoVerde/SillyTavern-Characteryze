@@ -24,6 +24,7 @@
 
 import { log, error }        from './log.js';
 import { CANVAS_TYPES }      from './defaults.js';
+import { getFieldList }      from './field-mapper.js';
 import {
     listSessions,
     newForgeSession,
@@ -73,6 +74,10 @@ function _buildHTML() {
         .map(c => `<option value="${_esc(c.avatar)}">${_esc(c.name)}</option>`)
         .join('');
 
+    const syspromptOptions = getFieldList(CANVAS_TYPES.SYSTEM_PROMPT)
+        .map(p => `<option value="${_esc(p.id)}">${_esc(p.label)}</option>`)
+        .join('');
+
     return `
         <div class="ctz-home-panel">
             <section class="ctz-section">
@@ -113,6 +118,9 @@ function _buildHTML() {
                         <option value="__new__">— Create New —</option>
                         ${charOptions}
                     </select>
+                    <select id="ctz-target-sysprompt" class="ctz-select ctz-hidden">
+                        ${syspromptOptions}
+                    </select>
                 </div>
             </section>
 
@@ -134,9 +142,10 @@ function _wire() {
     const renameInput   = _container.querySelector('#ctz-rename-input');
     const renameConfirm = _container.querySelector('#ctz-rename-confirm-btn');
     const renameCancel  = _container.querySelector('#ctz-rename-cancel-btn');
-    const canvasSelect  = _container.querySelector('#ctz-canvas-select');
-    const charSelect    = _container.querySelector('#ctz-target-char');
-    const targetRow     = _container.querySelector('#ctz-target-row');
+    const canvasSelect      = _container.querySelector('#ctz-canvas-select');
+    const charSelect        = _container.querySelector('#ctz-target-char');
+    const syspromptSelect   = _container.querySelector('#ctz-target-sysprompt');
+    const targetRow         = _container.querySelector('#ctz-target-row');
 
     // ── Session action button enable/disable ───────────────────────────────────
     function _updateSessionActions() {
@@ -185,21 +194,26 @@ function _wire() {
 
     // ── Canvas (immediate binding) ─────────────────────────────────────────────
     function _syncCanvas() {
-        const canvasType = canvasSelect.value;
-        const isCharCard = canvasType === CANVAS_TYPES.CHARACTER_CARD;
+        const canvasType  = canvasSelect.value;
+        const isCharCard  = canvasType === CANVAS_TYPES.CHARACTER_CARD;
+        const isSysPrompt = canvasType === CANVAS_TYPES.SYSTEM_PROMPT;
 
         setWorkspaceCanvas(canvasType);
 
         if (isCharCard) {
             const sel = charSelect?.value;
             setWorkspaceTarget(sel === '__new__' ? null : sel);
+        } else if (isSysPrompt) {
+            setWorkspaceTarget(syspromptSelect?.value || null);
         } else if (canvasType === CANVAS_TYPES.RULESET) {
             setWorkspaceTarget('__new__');
         } else {
-            setWorkspaceTarget(null); // System Prompt
+            setWorkspaceTarget(null);
         }
 
-        targetRow?.classList.toggle('ctz-hidden', !isCharCard);
+        targetRow?.classList.toggle('ctz-hidden', !isCharCard && !isSysPrompt);
+        charSelect?.classList.toggle('ctz-hidden', !isCharCard);
+        syspromptSelect?.classList.toggle('ctz-hidden', !isSysPrompt);
     }
 
     canvasSelect?.addEventListener('change', _syncCanvas);
@@ -209,6 +223,11 @@ function _wire() {
     charSelect?.addEventListener('change', () => {
         const sel = charSelect.value;
         setWorkspaceTarget(sel === '__new__' ? null : sel);
+    });
+
+    // ── Target system prompt (immediate binding) ───────────────────────────────
+    syspromptSelect?.addEventListener('change', () => {
+        setWorkspaceTarget(syspromptSelect.value || null);
     });
 
     // ── Dismiss ────────────────────────────────────────────────────────────────

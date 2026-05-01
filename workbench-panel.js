@@ -68,7 +68,7 @@ export function refreshPanel() {
 function _render() {
     const ws        = getWorkspace();
     const blocks    = getSessionBlocks();
-    const fields    = getFieldList(ws.canvas_type);
+    const fields    = getFieldList(ws.canvas_type, ws.target);
     const draft     = ws.filename ? getDraftState(ws.filename) : {};
     const dirtyKeys = Object.keys(draft);
 
