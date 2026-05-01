@@ -160,8 +160,7 @@ async function _createCharCard(draft) {
         throw new Error(`Character creation failed: ${resp.status}`);
     }
 
-    const json      = await resp.json();
-    const newAvatar = typeof json === 'string' ? json : (json.avatar ?? json.filename ?? '');
+    const newAvatar = (await resp.text()).trim();
 
     if (!newAvatar) {
         throw new Error('Character creation succeeded but server returned no identifier.');
