@@ -40,6 +40,7 @@ import {
     setWorkspaceTarget,
 } from './session-manager.js';
 import { extension_settings }             from '../../../extensions.js';
+import { getCharacters }                  from '../../../../script.js';
 import { CTZ_EXT_NAME, CANVAS_TYPES }     from './defaults.js';
 
 const TAG = 'Workbench';
@@ -282,11 +283,16 @@ function _wire(ws, blocks, fields) {
     });
 
     // Commit all staged fields
-    commitBtn?.addEventListener('click', async () => {
+    commitBtn?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (!ws.filename) return;
         const draft = getDraftState(ws.filename);
         try {
             await _commitAll(ws, draft);
+            if (ws.canvas_type === CANVAS_TYPES.CHARACTER_CARD) {
+                await getCharacters();
+            }
             clearDraftState(ws.filename);
             toastr.success('Workbench committed.');
             _render();
@@ -402,13 +408,20 @@ async function _commitAll(ws, draft) {
         Object.entries(draft).filter(([k]) => k !== 'portrait'),
     );
 
+    let activeTarget = ws.target;
+
     if (Object.keys(restDraft).length > 0) {
-        await commitDraftState(ws.canvas_type, ws.target, restDraft);
+        const returnedTarget = await commitDraftState(ws.canvas_type, ws.target, restDraft);
+        // A new character was just created — flip the session from create→edit mode
+        if (!ws.target && returnedTarget) {
+            setWorkspaceTarget(returnedTarget);
+            activeTarget = returnedTarget;
+        }
     }
 
-    if (portraitDraft && ws.target) {
+    if (portraitDraft && activeTarget) {
         if (_previewUrl) {
-            await commitPortrait(_previewUrl, ws.target);
+            await commitPortrait(_previewUrl, activeTarget);
             revokePreview(_previewUrl);
             _previewUrl = null;
         } else {

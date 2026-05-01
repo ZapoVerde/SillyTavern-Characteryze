@@ -86,31 +86,35 @@ function _rulesetLive(fieldId, rulesetName) {
 export async function commitDraftState(canvasType, target, draft) {
     if (!draft || Object.keys(draft).length === 0) {
         log(TAG, 'commitDraftState: nothing to commit');
-        return;
+        return target;
     }
     log(TAG, 'Committing draft', { canvasType, target, fields: Object.keys(draft) });
 
     switch (canvasType) {
         case CANVAS_TYPES.CHARACTER_CARD:
-            await _commitCharCard(target, draft);
-            break;
+            return await _commitCharCard(target, draft);
         case CANVAS_TYPES.SYSTEM_PROMPT:
             _commitSysPrompt(draft);
-            break;
+            return target;
         case CANVAS_TYPES.RULESET:
             await _commitRuleset(target, draft);
-            break;
+            return target;
         default:
             error(TAG, 'commitDraftState: unknown canvas type', canvasType);
+            return target;
     }
 }
 
 async function _commitCharCard(avatarFilename, draft) {
+    if (!avatarFilename) {
+        return await _createCharCard(draft);
+    }
+
     const ctx  = SillyTavern.getContext();
     const char = ctx.characters.find(c => c.avatar === avatarFilename);
     if (!char) {
         error(TAG, 'Character not found for commit:', avatarFilename);
-        return;
+        return avatarFilename;
     }
 
     const payload = {
@@ -134,6 +138,45 @@ async function _commitCharCard(avatarFilename, draft) {
         throw new Error(`Character edit failed: ${resp.status}`);
     }
     log(TAG, 'Character card committed:', avatarFilename);
+    return avatarFilename;
+}
+
+async function _createCharCard(draft) {
+    if (!draft.name?.trim()) {
+        const err = 'Cannot forge character: a name is required.';
+        error(TAG, err);
+        throw new Error(err);
+    }
+
+    const ctx  = SillyTavern.getContext();
+    const resp = await fetch('/api/characters/create', {
+        method:  'POST',
+        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ch_name: draft.name.trim() }),
+    });
+
+    if (!resp.ok) {
+        error(TAG, 'Character creation failed:', resp.status);
+        throw new Error(`Character creation failed: ${resp.status}`);
+    }
+
+    const json      = await resp.json();
+    const newAvatar = typeof json === 'string' ? json : (json.avatar ?? json.filename ?? '');
+
+    if (!newAvatar) {
+        throw new Error('Character creation succeeded but server returned no identifier.');
+    }
+    log(TAG, 'New character created:', newAvatar);
+
+    // Apply any remaining drafted fields to the freshly created card
+    const remainingDraft = Object.fromEntries(
+        Object.entries(draft).filter(([k]) => k !== 'name'),
+    );
+    if (Object.keys(remainingDraft).length > 0) {
+        await _commitCharCard(newAvatar, remainingDraft);
+    }
+
+    return newAvatar;
 }
 
 function _commitSysPrompt(draft) {
