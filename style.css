@@ -1,13 +1,13 @@
 /**
  * @file data/default-user/extensions/characteryze/style.css
- * @stamp {"utc":"2026-05-04T21:20:00.000Z"}
- * @version 1.1.0
+ * @stamp {"utc":"2026-05-04T21:30:00.000Z"}
+ * @version 1.1.1
  * @architectural-role Pure — Styling Definitions
  * @description
  * Defines the visual identity for Characteryze.
  * 
- * Updated: Added .ctz-forge-actions, .ctz-btn-danger, and .ctz-master-toggle 
- * to support the Master Enable workflow and dual-button ignition panel.
+ * Updated: Adjusted z-index levels so the Sidebar (3000) covers the FAB (2000).
+ * Refined FAB positioning to anchor 8px below the parent top-bar.
  *
  * @api-declaration
  * (none - pure CSS)
@@ -37,6 +37,7 @@
 /* ─── Floating Action Button (FAB) ────────────────────────────────────────── */
 .ctz-fab {
     position: absolute;
+    /* Anchors 8px below the bottom of the parent (#top-bar) */
     top: calc(100% + 8px);
     left: 8px;
     width: var(--ctz-fab-size);
@@ -46,7 +47,8 @@
     color: #1e1e2e;
     border: 2px solid rgba(255,255,255,0.1);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    z-index: 2001; 
+    /* Sits below the sidebar but above the main ST chat area */
+    z-index: 2000; 
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -84,7 +86,8 @@
     border-bottom: 1px solid var(--ctz-border);
     border-bottom-right-radius: var(--ctz-radius);
     box-shadow: 4px 0 20px rgba(0,0,0,0.5);
-    z-index: 850;
+    /* High z-index ensures it covers the FAB and ST UI elements */
+    z-index: 3000;
     display: flex;
     flex-direction: column;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
