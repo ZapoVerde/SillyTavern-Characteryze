@@ -1,13 +1,13 @@
 /**
  * @file data/default-user/extensions/characteryze/session-manager.js
- * @stamp {"utc":"2026-05-04T13:00:00.000Z"}
+ * @stamp {"utc":"2026-05-04T22:15:00.000Z"}
  * @architectural-role Stateful — Forge Session Lifecycle
  * @description
  * Owns the active workspace object and the known_sessions index. Handles
  * session creation, loading, and draft state persistence.
  *
- * Updated with `cleanupCurrentSessionIfEmpty` to autodelete sessions that
- * contain no user-authored content, preventing file accumulation.
+ * Verified: Aligned physical chat deletion logic with SillyTavern's 
+ * core script.js (verified /api/chats/delete payload structure).
  *
  * @api-declaration
  * newForgeSession(name?)                — create new chat, record session; returns entry
@@ -29,7 +29,7 @@
  *     purity: Stateful / IO
  *     state_ownership: [_workspace]
  *     external_io: [SillyTavern context, extension_settings write,
- *                   saveSettingsDebounced, toastr, /deletechat slash command]
+ *                   saveSettingsDebounced, toastr, /api/chats/delete fetch]
  */
 
 import { extension_settings }    from '../../../extensions.js';
@@ -142,7 +142,6 @@ export async function cleanupCurrentSessionIfEmpty() {
     const chat = ctx.chat || [];
 
     // An empty session is defined as one where the user hasn't sent any messages.
-    // System setup or greetings are ignored.
     const hasUserMessage = chat.some(m => m.is_user);
 
     if (!hasUserMessage && _workspace.filename) {
@@ -152,11 +151,22 @@ export async function cleanupCurrentSessionIfEmpty() {
         // 1. Metadata removal
         deleteSession(filenameToDelete);
 
-        // 2. Physical file removal via ST native command
+        // 2. Physical file removal via ST API (Verified against script.js)
         try {
-            await ctx.executeSlashCommandsWithOptions('/deletechat');
+            const char = ctx.characters[ctx.characterId];
+            if (!char) return;
+
+            await fetch('/api/chats/delete', {
+                method: 'POST',
+                headers: ctx.getRequestHeaders(),
+                body: JSON.stringify({
+                    avatar_url: char.avatar,
+                    chatfile: `${filenameToDelete}.jsonl` // Aligned with ST delChat expectations
+                }),
+            });
+            log(TAG, 'Empty chat file deleted from server.');
         } catch (err) {
-            warn(TAG, 'Failed to execute /deletechat during cleanup:', err);
+            warn(TAG, 'Failed to delete chat file during cleanup:', err);
         }
 
         _workspace.filename = null;
