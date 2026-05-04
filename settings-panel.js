@@ -29,7 +29,6 @@ import { log, error, setVerbose, isVerbose } from './log.js';
 import { activateTab }                       from './tab-bar.js';
 import { generatePortrait, revokePreview }   from './portrait-studio.js';
 import { 
-    CT_EXT_NAME, 
     CTZ_EXT_NAME, 
     CTZ_HOST_CHAR_NAME, 
     POLLINATIONS_SECRET_KEY_NAME,
