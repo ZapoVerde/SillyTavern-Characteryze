@@ -1,20 +1,20 @@
 /**
  * @file data/default-user/extensions/characteryze/profile-manager.js
- * @stamp {"utc":"2026-05-04T13:10:00.000Z"}
- * @version 2.1.0
- * @architectural-role Stateful — Connection Profile Lifecycle
+ * @stamp {"utc":"2026-05-04T13:50:00.000Z"}
+ * @version 2.2.1
+ * @architectural-role Stateful — Connection Profile & Preset Lifecycle
  * @description
- * Owns the Forge connection profile swap cycle. Manages the "Permasave" 
- * (the authoritative restore target). On launch, it captures the current 
- * active profile and swaps to the user-selected Forge Engine.
+ * Owns the Forge connection profile and chat preset swap cycle. Manages the 
+ * "Permasave" (the authoritative restore target). On launch, it captures 
+ * the current active state and swaps to the user-selected Forge environment.
  *
- * Updated to trigger session cleanup on exit, automatically deleting
- * empty Forge chats.
+ * Updated to capture and restore the Chat Completion Preset alongside the
+ * Connection Profile, and triggers session cleanup on exit.
  *
  * @api-declaration
  * initProfileManager()   — register CONNECTION_PROFILE_LOADED + CHAT_LOADED listeners
- * enterForge()           — capture permasave, suppress external listeners, swap to Forge profile
- * exitForge()            — restore permasave, restore external listeners, pop to loading screen
+ * enterForge()           — capture permasave, suppress external listeners, swap to Forge environment
+ * exitForge()            — restore permasave, restore external listeners, cleanup empty session
  * setUiActive(bool)      — set guard-exemption flag
  * isUiActive()           — returns current UI-active state
  * getPermasave()         — returns stored permasave profile name or null
@@ -35,6 +35,7 @@ import { log, warn, error }                          from './log.js';
 import { CTZ_EXT_NAME }                              from './defaults.js';
 import { ConnectionManagerRequestService }           from '../../shared.js';
 import { cleanupCurrentSessionIfEmpty }              from './session-manager.js';
+import { openai_setting_names }                      from '../../../../scripts/openai.js';
 
 const TAG = 'Profile';
 
@@ -82,6 +83,23 @@ function _readActiveProfileName() {
     }
 }
 
+/**
+ * Reads the active Chat Completion preset name.
+ */
+function _readActivePresetName() {
+    try {
+        const ctx = SillyTavern.getContext();
+        const activeIdx = ctx.extensionSettings.openai?.settings_active_openai;
+        if (activeIdx === undefined) return null;
+        
+        return Object.keys(openai_setting_names).find(
+            key => openai_setting_names[key] === activeIdx
+        ) ?? null;
+    } catch {
+        return null;
+    }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 export function initProfileManager() {
@@ -113,6 +131,11 @@ async function _onChatLoaded() {
 
         error(TAG, 'Guard: Forge profile active outside session — restoring:', permasave);
         await _applyProfile(permasave);
+        
+        if (settings.permasave_preset) {
+            await _applyPreset(settings.permasave_preset);
+        }
+
         _popToLoadingScreen();
     }
 }
@@ -120,13 +143,14 @@ async function _onChatLoaded() {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Capture current state and swap to Forge Engine.
+ * Capture current state and swap to Forge Engine and Preset.
  */
 export async function enterForge() {
-    const settings   = extension_settings[CTZ_EXT_NAME];
-    const targetName = _resolveTargetProfileName(settings);
+    const settings      = extension_settings[CTZ_EXT_NAME];
+    const targetProfile = _resolveTargetProfileName(settings);
+    const targetPreset  = settings.forge_preset_name ?? 'Default';
 
-    if (!targetName) {
+    if (!targetProfile) {
         throw new Error(
             'Forge Engine not configured. Please select a connection profile ' +
             'in Characteryze Settings first.'
@@ -134,24 +158,29 @@ export async function enterForge() {
     }
 
     const currentProfile = _lastKnownProfile ?? _readActiveProfileName();
+    const currentPreset  = _readActivePresetName();
 
     if (!currentProfile) {
         throw new Error('Could not identify current connection profile for restoration.');
     }
 
-    // Only set permasave if we aren't already on the target (prevents overwriting restoration target)
-    if (currentProfile !== targetName) {
+    // Capture permasave if we are moving from user's env to Forge env
+    if (currentProfile !== targetProfile) {
         settings.permasave_profile = currentProfile;
+        settings.permasave_preset  = currentPreset;
         saveSettingsDebounced();
-        log(TAG, 'Permasave captured:', currentProfile);
+        log(TAG, 'Permasave captured:', { profile: currentProfile, preset: currentPreset });
     }
 
     _uiActive = true;
     _suppressExternalListeners();
 
     try {
-        if (currentProfile !== targetName) {
-            await _applyProfile(targetName);
+        if (currentProfile !== targetProfile) {
+            await _applyProfile(targetProfile);
+        }
+        if (currentPreset !== targetPreset) {
+            await _applyPreset(targetPreset);
         }
     } catch (err) {
         _restoreExternalListeners();
@@ -161,19 +190,23 @@ export async function enterForge() {
 }
 
 /**
- * Exit Forge and restore Permasave profile.
+ * Exit Forge and restore Permasave state.
  */
 export async function exitForge() {
     const settings  = extension_settings[CTZ_EXT_NAME];
-    const permasave = settings?.permasave_profile;
+    const pProfile  = settings?.permasave_profile;
+    const pPreset   = settings?.permasave_preset;
 
     try {
-        // Cleanup empty sessions while still in Forge profile context
+        // Cleanup empty sessions while still in Forge context
         await cleanupCurrentSessionIfEmpty();
 
-        if (permasave) {
-            log(TAG, 'Exiting Forge: restoring profile:', permasave);
-            await _applyProfile(permasave);
+        if (pProfile) {
+            log(TAG, 'Exiting Forge: restoring environment:', { profile: pProfile, preset: pPreset });
+            await _applyProfile(pProfile);
+            if (pPreset) {
+                await _applyPreset(pPreset);
+            }
         }
     } finally {
         _uiActive = false;
@@ -217,6 +250,12 @@ async function _applyProfile(name) {
     const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
     log(TAG, 'Switching profile to:', name);
     await executeSlashCommandsWithOptions(`/profile ${name}`);
+}
+
+async function _applyPreset(name) {
+    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+    log(TAG, 'Switching preset to:', name);
+    await executeSlashCommandsWithOptions(`/preset ${name}`);
 }
 
 function _popToLoadingScreen() {

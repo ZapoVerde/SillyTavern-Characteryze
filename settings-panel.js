@@ -1,15 +1,14 @@
 /**
  * @file data/default-user/extensions/characteryze/settings-panel.js
- * @stamp {"utc":"2026-04-30T11:00:00.000Z"}
- * @version 2.0.0
+ * @stamp {"utc":"2026-05-04T13:35:00.000Z"}
+ * @version 2.1.0
  * @architectural-role IO — Settings Panel UI
  * @description
  * Renders the Settings tab. Manages image generation (Pollinations) and
- * Forge Engine profile selection.
+ * Forge Engine/Preset selection.
  *
- * This version distinguishes between the "Setup Drawer" (ST Extensions menu)
- * and the "Active Sidebar" (FAB menu). Instructions are only shown in the
- * drawer, and sections are made collapsible to maintain tidiness.
+ * This version adds the "Forge Preset" selector to ensure the Forge 
+ * environment uses a clean Chat Completion profile.
  *
  * @api-declaration
  * mountPanel(container, idPrefix) — inject settings HTML and wire inputs
@@ -19,7 +18,8 @@
  *     purity: IO
  *     state_ownership: []
  *     external_io: [DOM, extension_settings write, saveSettingsDebounced, 
- *                   writeSecret, secret_state, ConnectionManagerRequestService]
+ *                   writeSecret, secret_state, ConnectionManagerRequestService,
+ *                   openai_setting_names read]
  */
 
 import { extension_settings }    from '../../../extensions.js';
@@ -29,6 +29,7 @@ import { log, error, setVerbose, isVerbose } from './log.js';
 import { activateTab }                       from './tab-bar.js';
 import { generatePortrait, revokePreview }   from './portrait-studio.js';
 import { 
+    CT_EXT_NAME, 
     CTZ_EXT_NAME, 
     CTZ_HOST_CHAR_NAME, 
     POLLINATIONS_SECRET_KEY_NAME,
@@ -36,6 +37,7 @@ import {
     DEFAULT_PORTRAIT_PROMPT_TEMPLATE 
 } from './defaults.js';
 import { ConnectionManagerRequestService } from '../../shared.js';
+import { openai_setting_names }            from '../../../../scripts/openai.js';
 
 const TAG = 'Settings';
 
@@ -55,11 +57,16 @@ function _buildHTML(p) {
     const sess   = s.sessions    ?? {};
     const tmpl   = ig.prompt_template ?? DEFAULT_PORTRAIT_PROMPT_TEMPLATE;
     const currentModel = ig.model ?? 'flux';
+    const currentPreset = s.forge_preset_name ?? 'Default';
     const isDrawer = p === 'ctzd';
 
     const modelOptions = POLLINATIONS_MODELS.map(m => 
         `<option value="${_esc(m)}" ${m === currentModel ? 'selected' : ''}>${_esc(m)}</option>`
     ).join('');
+
+    const presetOptions = Object.keys(openai_setting_names || {})
+        .map(n => `<option value="${_esc(n)}" ${n === currentPreset ? 'selected' : ''}>${_esc(n)}</option>`)
+        .join('');
 
     // Instructions: Only for the Drawer
     const guide = isDrawer ? `
@@ -88,14 +95,24 @@ function _buildHTML(p) {
         <div class="ctz-settings-panel">
             ${guide}
 
-            ${wrap('Forge Engine', `
+            ${wrap('Forge Environment', `
                 <div class="ctz-form-row">
-                    <label class="ctz-label" for="${p}-forge-engine">Active Engine</label>
+                    <label class="ctz-label" for="${p}-forge-engine">Forge Engine</label>
                     <select id="${p}-forge-engine" class="ctz-select"></select>
                 </div>
                 <div class="ctz-form-row">
-                    <label class="ctz-label">Permasave Target</label>
+                    <label class="ctz-label" for="${p}-forge-preset">Forge Preset</label>
+                    <select id="${p}-forge-preset" class="ctz-select">
+                        ${presetOptions}
+                    </select>
+                </div>
+                <div class="ctz-form-row">
+                    <label class="ctz-label">Permasave Engine</label>
                     <span class="ctz-muted">${_esc(s.permasave_profile ?? '—')}</span>
+                </div>
+                <div class="ctz-form-row">
+                    <label class="ctz-label">Permasave Preset</label>
+                    <span class="ctz-muted">${_esc(s.permasave_preset ?? '—')}</span>
                 </div>
             `)}
 
@@ -158,6 +175,11 @@ function _wire(container, p) {
 
     container.querySelector(`#${p}-image-model`)?.addEventListener('change', (e) => {
         s().image_gen.model = e.target.value;
+        saveSettingsDebounced();
+    });
+
+    container.querySelector(`#${p}-forge-preset`)?.addEventListener('change', (e) => {
+        s().forge_preset_name = e.target.value;
         saveSettingsDebounced();
     });
 

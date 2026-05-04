@@ -1,12 +1,12 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-04-29T13:00:00.000Z"}
- * @version 1.5.0
+ * @stamp {"utc":"2026-05-04T13:20:00.000Z"}
+ * @version 1.6.0
  * @architectural-role Pure — Static Configuration
  * @description
  * Seed constants for Characteryze. Defines naming conventions, canvas schemas,
  * and Pollinations API configuration. Aligned with Vistalyze for verified
- * image generation pathways. Updated for Phase 1 Ruleset refactor.
+ * image generation pathways. Updated for Forge Preset management.
  *
  * @api-declaration
  * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
@@ -91,8 +91,10 @@ export const DEFAULT_PORTRAIT_PROMPT_TEMPLATE =
 /** Shape of extension_settings.characteryze — written on first init. */
 export const DEFAULT_SETTINGS = Object.freeze({
     permasave_profile:   null,
+    permasave_preset:    null,
     forge_profile_name: CTZ_FORGE_PROFILE_NAME,
     forge_profile_id:   null,
+    forge_preset_name:  'Default',
     ui_active:          false,
     devMode:            false,    // Generates low-res previews when true
     known_sessions:     [],       // [{ filename, canvas_type, session_name, created_at }]
