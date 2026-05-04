@@ -1,28 +1,22 @@
 /**
  * @file data/default-user/extensions/characteryze/profile-manager.js
- * @stamp {"utc":"2026-04-29T11:30:00.000Z"}
- * @version 1.3.0
+ * @stamp {"utc":"2026-04-30T10:30:00.000Z"}
+ * @version 2.0.0
  * @architectural-role Stateful — Connection Profile Lifecycle
  * @description
- * Owns the Forge connection profile swap cycle. Manages permasave (the
- * authoritative restore target), swap-in on CTZ open, swap-out on CTZ exit,
- * and the CHAT_LOADED rogue-profile guard.
+ * Owns the Forge connection profile swap cycle. Manages the "Permasave" 
+ * (the authoritative restore target). On launch, it captures the current 
+ * active profile and swaps to the user-selected Forge Engine.
  *
- * Resolves the target Forge profile name via ConnectionManagerRequestService
- * based on the saved forge_profile_id in extension settings.
- *
- * During Forge sessions, external extension listeners for CHAT_CHANGED (and
- * related events) are suppressed by swapping out their listener arrays on the
- * shared eventSource. This prevents any loaded extension from reacting to
- * character/chat navigation that occurs inside the Forge. Listeners are
- * restored in full before the final pop-to-loading-screen on exit.
+ * This version removes all profile-creation logic. It assumes the user 
+ * has manually created a connection profile and selected it in the 
+ * Characteryze settings.
  *
  * @api-declaration
  * initProfileManager()   — register CONNECTION_PROFILE_LOADED + CHAT_LOADED listeners
- * ensureForgeProfile()   — idempotently create default Forge profile if absent
  * enterForge()           — capture permasave, suppress external listeners, swap to Forge profile
  * exitForge()            — restore permasave, restore external listeners, pop to loading screen
- * setUiActive(bool)      — set guard-exemption flag (called by index.js on launch/close)
+ * setUiActive(bool)      — set guard-exemption flag
  * isUiActive()           — returns current UI-active state
  * getPermasave()         — returns stored permasave profile name or null
  *
@@ -31,15 +25,15 @@
  *     purity: Stateful / IO
  *     state_ownership: [_lastKnownProfile, _uiActive, _savedListeners]
  *     external_io: [executeSlashCommandsWithOptions, saveSettingsDebounced,
- *                   extension_settings write, DOM (#rm_button_characters),
- *                   ConnectionManagerRequestService, eventSource.events (direct write)]
+ *                   extension_settings write, ConnectionManagerRequestService, 
+ *                   eventSource.events (direct mutation)]
  */
 
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types }                  from '../../../../script.js';
 import { log, warn, error }                          from './log.js';
-import { CTZ_EXT_NAME } from './defaults.js';
+import { CTZ_EXT_NAME }                              from './defaults.js';
 import { ConnectionManagerRequestService }           from '../../shared.js';
 
 const TAG = 'Profile';
@@ -48,15 +42,10 @@ let _lastKnownProfile = null;
 let _uiActive         = false;
 
 // Events whose external listeners are silenced for the duration of a Forge session.
-// CHAT_CHANGED is the primary trigger consumed by all sibling extensions.
-// CHAT_LOADED is intentionally excluded — Characteryze's own session machinery
-// relies on it via eventSource.once() to sequence internal awaits.
 const _SUPPRESSED_EVENTS = [
     event_types.CHAT_CHANGED,
 ];
 
-// Stores the original listener arrays while suppression is active.
-// Keyed by event name; value is the array reference taken from eventSource.events.
 const _savedListeners = {};
 
 // ─── Listener suppression ─────────────────────────────────────────────────────
@@ -78,10 +67,7 @@ function _restoreExternalListeners() {
 }
 
 /**
- * Proactively reads the active connection profile name directly from the
- * connection-manager's persisted state. Used as a fallback when the
- * CONNECTION_PROFILE_LOADED event has not fired since page load.
- * Returns null if the state is unavailable or no profile is selected.
+ * Reads the active connection profile name from connection-manager.
  */
 function _readActiveProfileName() {
     try {
@@ -101,7 +87,7 @@ function _readActiveProfileName() {
 export function initProfileManager() {
     eventSource.on(event_types.CONNECTION_PROFILE_LOADED, _onProfileLoaded);
     eventSource.on(event_types.CHAT_LOADED, _onChatLoaded);
-    log(TAG, 'Listeners registered');
+    log(TAG, 'Profile Manager Initialized');
 }
 
 // ─── Internal listeners ───────────────────────────────────────────────────────
@@ -110,7 +96,7 @@ function _onProfileLoaded(payload) {
     const name = typeof payload === 'string' ? payload : (payload?.name ?? null);
     if (name) {
         _lastKnownProfile = name;
-        log(TAG, 'Profile loaded:', name);
+        log(TAG, 'Profile load detected:', name);
     }
 }
 
@@ -120,23 +106,21 @@ async function _onChatLoaded() {
     const settings = extension_settings[CTZ_EXT_NAME];
     const targetName = _resolveTargetProfileName(settings);
 
-    if (_lastKnownProfile !== targetName) return;
+    // If the Forge profile is active but the extension is NOT, trigger restoration.
+    if (targetName && _lastKnownProfile === targetName) {
+        const permasave = settings?.permasave_profile;
+        if (!permasave) return;
 
-    const permasave = settings?.permasave_profile;
-    if (!permasave) {
-        warn(TAG, 'Guard: Forge profile active without CTZ UI — no permasave to restore');
-        return;
+        error(TAG, 'Guard: Forge profile active outside session — restoring:', permasave);
+        await _applyProfile(permasave);
+        _popToLoadingScreen();
     }
-
-    error(TAG, 'Guard: Forge profile active outside CTZ — restoring', permasave);
-    await _applyProfile(permasave);
-    _popToLoadingScreen();
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Idempotently ensures the default Forge profile exists.
+ * Capture current state and swap to Forge Engine.
  */
 export async function enterForge() {
     const settings   = extension_settings[CTZ_EXT_NAME];
@@ -144,65 +128,49 @@ export async function enterForge() {
 
     if (!targetName) {
         throw new Error(
-            'Characteryze: no Forge engine is configured. ' +
-            'Select a connection profile in CTZ Settings → Forge Engine.'
+            'Forge Engine not configured. Please select a connection profile ' +
+            'in Characteryze Settings first.'
         );
     }
 
-    // Prefer the event-updated cache; fall back to a direct settings read.
-    let currentProfile = _lastKnownProfile ?? _readActiveProfileName();
+    const currentProfile = _lastKnownProfile ?? _readActiveProfileName();
 
     if (!currentProfile) {
-        throw new Error(
-            'Characteryze: current connection profile is unknown. ' +
-            'Load a connection profile and try again.'
-        );
+        throw new Error('Could not identify current connection profile for restoration.');
     }
 
-    if (currentProfile === targetName) {
-        // Two distinct causes — handle them separately.
-        const existingPermasave = settings.permasave_profile;
-
-        if (existingPermasave && existingPermasave !== targetName) {
-            // Crash recovery: a previous session ended without restoring the
-            // profile. Auto-restore from the saved permasave and continue.
-            log(TAG, 'Forge profile left active from prior session — auto-restoring:', existingPermasave);
-            await _applyProfile(existingPermasave);
-            currentProfile = existingPermasave;
-        } else {
-            // Misconfiguration: forge_profile_id is set to the user's current
-            // profile, so there is no safe restore target.
-            throw new Error(
-                `Characteryze: the connection "${currentProfile}" is configured as both your ` +
-                `current profile and the Forge engine. ` +
-                `Select a different profile as the Forge engine in CTZ Settings.`
-            );
-        }
+    // Only set permasave if we aren't already on the target (prevents overwriting restoration target)
+    if (currentProfile !== targetName) {
+        settings.permasave_profile = currentProfile;
+        saveSettingsDebounced();
+        log(TAG, 'Permasave captured:', currentProfile);
     }
-
-    settings.permasave_profile = currentProfile;
-    saveSettingsDebounced();
-    log(TAG, 'Permasave written — profile:', currentProfile);
 
     _uiActive = true;
     _suppressExternalListeners();
+
     try {
-        await _applyProfile(targetName);
+        if (currentProfile !== targetName) {
+            await _applyProfile(targetName);
+        }
     } catch (err) {
         _restoreExternalListeners();
+        _uiActive = false;
         throw err;
     }
 }
 
+/**
+ * Exit Forge and restore Permasave profile.
+ */
 export async function exitForge() {
     const settings  = extension_settings[CTZ_EXT_NAME];
     const permasave = settings?.permasave_profile;
 
     try {
         if (permasave) {
+            log(TAG, 'Exiting Forge: restoring profile:', permasave);
             await _applyProfile(permasave);
-        } else {
-            warn(TAG, 'exitForge: no permasave — profile not restored');
         }
     } finally {
         _uiActive = false;
@@ -227,8 +195,7 @@ export function getPermasave() {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Resolves the profile name to use for the Forge.
- * Checks for a selected ID first, then falls back to default name.
+ * Resolves the profile name for the Forge from extension settings.
  */
 function _resolveTargetProfileName(settings) {
     const selectedId = settings?.forge_profile_id;
@@ -237,7 +204,7 @@ function _resolveTargetProfileName(settings) {
             const profile = ConnectionManagerRequestService.getProfile(selectedId);
             if (profile?.name) return profile.name;
         } catch (err) {
-            warn(TAG, 'Could not resolve profile name for ID:', selectedId);
+            warn(TAG, 'Could not resolve Forge profile for ID:', selectedId);
         }
     }
     return null;
@@ -245,11 +212,11 @@ function _resolveTargetProfileName(settings) {
 
 async function _applyProfile(name) {
     const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
-    log(TAG, 'Applying profile:', name);
+    log(TAG, 'Switching profile to:', name);
     await executeSlashCommandsWithOptions(`/profile ${name}`);
 }
 
 function _popToLoadingScreen() {
-    log(TAG, 'Popping to loading screen');
+    log(TAG, 'Refreshing UI state');
     $('#rm_button_characters').trigger('click');
 }

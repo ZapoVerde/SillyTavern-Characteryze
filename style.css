@@ -1,10 +1,13 @@
 /* ============================================================================
    Characteryze — style.css
-   stamp: 2026-04-28T00:00:00.000Z
-   All CTZ selectors are prefixed .ctz- to avoid collisions with ST styles.
+   stamp: 2026-04-30T10:20:00.000Z
+   Architectural Role: Pure — Styling Definitions
+   Description:
+   Defines the visual identity for Characteryze. Transitions the UI from a 
+   full-screen overlay to a non-blocking sidebar and a Floating Action Button (FAB).
+   Uses ST native CSS tokens for color harmony.
    ============================================================================ */
 
-/* ─── CSS variables (inherits ST colour tokens where available) ─────────────── */
 :root {
     --ctz-bg:           #1e1e2e;
     --ctz-surface:      #2a2a3e;
@@ -16,507 +19,267 @@
     --ctz-danger:       #f38ba8;
     --ctz-success:      #a6e3a1;
     --ctz-radius:       6px;
-    --ctz-tab-h:        40px;
-    --ctz-strip-h:      54px;
+    --ctz-sidebar-w:    320px;
+    --ctz-fab-size:     44px;
 }
 
-/* ─── Overlay container ─────────────────────────────────────────────────────── */
-.ctz-overlay {
-    position:   fixed;
-    top:        0;
-    left:       0;
-    width:      100%;
-    z-index:    9000;
-    display:    flex;
-    flex-direction: column;
-    pointer-events: none;
-}
-
-.ctz-overlay.ctz-hidden {
-    display: none;
-}
-
-/* In chat mode only the tab bar is full-height; panels collapse */
-.ctz-overlay.ctz-chat-mode .ctz-panel-area {
-    display: none;
-}
-
-/* ─── Tab bar ────────────────────────────────────────────────────────────────── */
-.ctz-tab-bar {
-    display:         flex;
-    align-items:     center;
-    justify-content: space-between;
-    height:          var(--ctz-tab-h);
-    background:      var(--ctz-bg);
-    border-bottom:   1px solid var(--ctz-border);
-    padding:         0 8px;
-    pointer-events:  all;
-}
-
-.ctz-tabs {
+/* ─── Floating Action Button (FAB) ────────────────────────────────────────── */
+.ctz-fab {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    width: var(--ctz-fab-size);
+    height: var(--ctz-fab-size);
+    border-radius: 50%;
+    background: var(--ctz-accent);
+    color: #1e1e2e;
+    border: 2px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 800;
+    cursor: pointer;
     display: flex;
-    gap:     4px;
-}
-
-.ctz-tab-btn {
-    background:    transparent;
-    border:        1px solid transparent;
-    border-radius: var(--ctz-radius);
-    color:         var(--ctz-muted);
-    cursor:        pointer;
-    font-size:     13px;
-    padding:       4px 12px;
-    transition:    color .15s, border-color .15s;
-}
-
-.ctz-tab-btn:hover {
-    color:        var(--ctz-text);
-    border-color: var(--ctz-border);
-}
-
-.ctz-tab-btn.ctz-tab-active {
-    color:        var(--ctz-accent);
-    border-color: var(--ctz-accent);
-    font-weight:  600;
-}
-
-.ctz-exit-btn {
-    background:    transparent;
-    border:        none;
-    color:         var(--ctz-muted);
-    cursor:        pointer;
-    font-size:     16px;
-    line-height:   1;
-    padding:       4px 8px;
-}
-
-.ctz-exit-btn:hover { color: var(--ctz-danger); }
-
-/* ─── Hamburger / mobile nav (hidden on desktop) ────────────────────────────── */
-.ctz-hamburger-btn {
-    display:     none;
-    background:  transparent;
-    border:      none;
-    color:       var(--ctz-text);
-    cursor:      pointer;
-    font-size:   18px;
-    line-height: 1;
-    padding:     4px 8px;
-    flex-shrink: 0;
-}
-
-.ctz-active-label { display: none; }
-
-.ctz-mobile-nav { display: none; }
-
-.ctz-menu-close-btn {
-    background:  transparent;
-    border:      none;
-    color:       var(--ctz-muted);
-    cursor:      pointer;
-    font-size:   16px;
-    line-height: 1;
-    padding:     8px 12px;
-    align-self:  flex-end;
-}
-.ctz-menu-close-btn:hover { color: var(--ctz-danger); }
-
-/* ─── Dismiss handle ─────────────────────────────────────────────────────────── */
-.ctz-dismiss-handle {
-    display:        block;
-    width:          100%;
-    background:     transparent;
-    border:         none;
-    border-top:     1px solid var(--ctz-border);
-    color:          var(--ctz-muted);
-    cursor:         pointer;
-    font-size:      11px;
-    letter-spacing: .06em;
-    margin-top:     12px;
-    padding:        8px 0 2px;
-    text-align:     center;
-    text-transform: uppercase;
-    transition:     color .15s;
-}
-.ctz-dismiss-handle:hover { color: var(--ctz-text); }
-
-/* ─── Panel area ─────────────────────────────────────────────────────────────── */
-.ctz-panel-area {
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
     pointer-events: all;
 }
 
-.ctz-panel {
-    background:   var(--ctz-bg);
+.ctz-fab:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+}
+
+.ctz-fab-idle {
+    background: var(--ctz-muted);
+    opacity: 0.8;
+}
+
+.ctz-fab-active {
+    background: var(--ctz-accent);
+    opacity: 1;
+}
+
+/* ─── Sidebar Container ────────────────────────────────────────────────────── */
+.ctz-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--ctz-sidebar-w);
+    height: 100vh;
+    background: var(--ctz-bg);
+    border-right: 1px solid var(--ctz-border);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+    z-index: 850;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: all;
+}
+
+.ctz-sidebar.ctz-hidden {
+    transform: translateX(-100%);
+    pointer-events: none;
+}
+
+/* ─── Sidebar Parts ────────────────────────────────────────────────────────── */
+.ctz-sidebar-header {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     border-bottom: 1px solid var(--ctz-border);
-    max-height:   calc(100vh - var(--ctz-tab-h) - 60px);
-    overflow-y:   auto;
-    padding:      12px 16px;
+    flex-shrink: 0;
+}
+
+.ctz-exit-btn {
+    background: transparent;
+    border: none;
+    color: var(--ctz-muted);
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+}
+.ctz-exit-btn:hover { color: var(--ctz-danger); }
+
+.ctz-tabs {
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    gap: 4px;
+    border-bottom: 1px solid var(--ctz-border);
+    flex-shrink: 0;
+}
+
+.ctz-tab-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ctz-radius);
+    color: var(--ctz-muted);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 10px 12px;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+}
+
+.ctz-tab-btn:hover {
+    background: var(--ctz-surface);
+    color: var(--ctz-text);
+}
+
+.ctz-tab-btn.ctz-tab-active {
+    background: var(--ctz-surface);
+    color: var(--ctz-accent);
+    border-color: var(--ctz-accent);
+    font-weight: 600;
+}
+
+/* ─── Content Area ─────────────────────────────────────────────────────────── */
+.ctz-panel-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
 }
 
 .ctz-panel.ctz-hidden { display: none; }
 
-/* ─── Forge strip ─────────────────────────────────────────────────────────────  */
-.ctz-forge-strip {
-    display:         flex;
-    align-items:     center;
-    gap:             16px;
-    height:          var(--ctz-strip-h);
-    padding:         0 12px;
-    flex-wrap:       wrap;
+.ctz-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+
+.ctz-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ctz-accent);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 8px;
 }
 
-.ctz-forge-info {
-    display:     flex;
-    align-items: center;
-    gap:         12px;
-    flex:        1;
-    min-width:   0;
-    overflow:    hidden;
-}
-
-.ctz-forge-meta { font-size: 12px; white-space: nowrap; }
-.ctz-label-sm   { font-size: 11px; color: var(--ctz-muted); }
-
-.ctz-ruleset-wrap { flex-shrink: 0; }
-
-.ctz-ruleset-details { display: inline-block; }
-
-.ctz-ruleset-summary {
-    cursor:      pointer;
-    font-size:   12px;
-    color:       var(--ctz-accent);
-    user-select: none;
-}
-
-.ctz-ruleset-list {
-    background:    var(--ctz-surface);
-    border:        1px solid var(--ctz-border);
-    border-radius: var(--ctz-radius);
-    padding:       6px 8px;
-    display:       flex;
-    flex-direction: column;
-    gap:           4px;
-    position:      absolute;
-    z-index:       100;
-    min-width:     180px;
-}
-
-.ctz-ruleset-item {
-    display:     flex;
-    align-items: center;
-    gap:         6px;
-    font-size:   12px;
-    cursor:      pointer;
-}
-
-/* Generic list-row used by rulesets-panel */
-.ctz-session-row  { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--ctz-radius); border: 1px solid var(--ctz-border); }
-.ctz-session-name { flex: 1; font-size: 13px; }
-
-/* Ruleset ordering widget: ↑ [n] ↓ */
-.ctz-order-widget {
-    display:     flex;
-    align-items: center;
-    gap:         2px;
-    flex-shrink: 0;
-}
-
-.ctz-order-num {
-    font-family: monospace;
-    font-size:   12px;
-    color:       var(--ctz-muted);
-    min-width:   2.5ch;
-    text-align:  center;
-}
-
-.ctz-order-btn:not(:disabled):hover { color: var(--ctz-accent); }
-
-/* ─── Home panel ─────────────────────────────────────────────────────────────── */
-.ctz-home-panel { display: flex; flex-direction: column; gap: 16px; }
-
-.ctz-icon-btn {
-    background:    transparent;
-    border:        none;
-    color:         var(--ctz-muted);
-    cursor:        pointer;
-    font-size:     13px;
-    line-height:   1;
-    padding:       2px 4px;
-    border-radius: 3px;
-    flex-shrink:   0;
-    transition:    color .15s;
-}
-
-.ctz-icon-btn:disabled            { opacity: .35; cursor: not-allowed; }
-.ctz-rename-btn:not(:disabled):hover { color: var(--ctz-accent); }
-.ctz-delete-btn:not(:disabled):hover { color: var(--ctz-danger); }
-
-.ctz-btn-block { width: 100%; }
-
-/* ─── Workbench ──────────────────────────────────────────────────────────────── */
-.ctz-workbench {
-    display: flex;
-    gap:     12px;
-    height:  100%;
-}
-
-.ctz-wb-sidebar {
-    width:          200px;
-    flex-shrink:    0;
-    display:        flex;
-    flex-direction: column;
-    gap:            6px;
-}
+/* ─── Workbench Specifics ──────────────────────────────────────────────────── */
+.ctz-workbench { display: flex; flex-direction: column; gap: 12px; }
 
 .ctz-block-list {
-    flex:       1;
-    overflow-y: auto;
-    display:    flex;
+    display: flex;
     flex-direction: column;
-    gap:        4px;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    padding: 4px;
 }
 
 .ctz-block-item {
-    padding:       4px 8px;
-    border:        1px solid var(--ctz-border);
-    border-radius: var(--ctz-radius);
-    cursor:        pointer;
-    font-size:     12px;
+    padding: 6px 10px;
+    background: var(--ctz-surface);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    border: 1px solid transparent;
 }
-
 .ctz-block-item:hover { border-color: var(--ctz-accent); }
 
-.ctz-block-lang {
-    display:       inline-block;
-    font-size:     10px;
-    background:    var(--ctz-surface);
-    border-radius: 3px;
-    padding:       1px 5px;
-    margin-right:  4px;
-    color:         var(--ctz-accent);
-}
+.ctz-block-lang { color: var(--ctz-accent); font-weight: bold; margin-right: 6px; }
 
-.ctz-block-preview { color: var(--ctz-muted); font-size: 11px; }
-
-.ctz-wb-main {
-    flex:           1;
-    display:        flex;
-    flex-direction: column;
-    gap:            8px;
-    min-width:      0;
-}
-
-.ctz-wb-toolbar {
-    display:     flex;
-    align-items: center;
-    gap:         8px;
-}
-
-/* Panes always stack vertically (over/under) */
-.ctz-diff-panes {
-    display:        flex;
-    flex-direction: column;
-    gap:            8px;
-}
-
-.ctz-pane {
-    display:        flex;
-    flex-direction: column;
-    min-width:      0;
-}
-
-/* ─── Mobile layout (≤600px) ─────────────────────────────────────────────────── */
-@media (max-width: 600px) {
-
-    /* Hamburger button and active-tab label replace the tab row */
-    .ctz-hamburger-btn { display: block; }
-
-    .ctz-active-label {
-        display:     block;
-        flex:        1;
-        font-size:   13px;
-        margin-left: 8px;
-        color:       var(--ctz-text);
-        overflow:    hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-    }
-
-    /* Hide the horizontal desktop tab row */
-    .ctz-tabs { display: none; }
-
-    /* Mobile nav dropdown — absolutely anchored below the tab bar */
-    .ctz-mobile-nav {
-        display:        flex;
-        flex-direction: column;
-        position:       absolute;
-        top:            var(--ctz-tab-h);
-        left:           0;
-        right:          0;
-        background:     var(--ctz-bg);
-        border-bottom:  1px solid var(--ctz-border);
-        pointer-events: all;
-        z-index:        2;
-    }
-
-    .ctz-mobile-nav.ctz-menu-closed { display: none; }
-
-    .ctz-mobile-nav .ctz-tab-btn {
-        text-align:    left;
-        border:        none;
-        border-bottom: 1px solid var(--ctz-border);
-        border-radius: 0;
-        font-size:     14px;
-        padding:       10px 16px;
-        width:         100%;
-    }
-
-    /* Workbench: sidebar collapses below the main editor */
-    .ctz-workbench { flex-direction: column; }
-
-    .ctz-wb-main    { order: 1; }
-
-    .ctz-wb-sidebar {
-        order:      2;
-        width:      100%;
-        max-height: 180px;
-    }
-}
-
-.ctz-pane-header {
-    display:        flex;
-    align-items:    center;
-    justify-content: space-between;
-    font-size:      11px;
-    color:          var(--ctz-muted);
-    margin-bottom:  4px;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-}
-
-.ctz-pane-header-actions {
-    display: flex;
-    gap:     4px;
-}
+.ctz-diff-panes { display: flex; flex-direction: column; gap: 8px; }
 
 .ctz-pane-text {
-    flex:         1;
-    resize:       none;
-    background:   var(--ctz-surface);
-    border:       1px solid var(--ctz-border);
+    width: 100%;
+    min-height: 120px;
+    background: var(--ctz-surface);
+    color: var(--ctz-text);
+    border: 1px solid var(--ctz-border);
     border-radius: var(--ctz-radius);
-    color:        var(--ctz-text);
-    font-family:  monospace;
-    font-size:    12px;
-    min-height:   180px;
-    padding:      8px;
-    width:        100%;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 8px;
+    resize: vertical;
 }
 
-.ctz-pane-live .ctz-pane-text { opacity: .75; }
+/* ─── Forms & Buttons ──────────────────────────────────────────────────────── */
+.ctz-form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ctz-label { width: 100px; flex-shrink: 0; font-size: 12px; color: var(--ctz-muted); }
 
-.ctz-portrait-preview {
-    display:        flex;
-    align-items:    center;
-    gap:            12px;
-    padding-top:    8px;
-}
-
-.ctz-portrait-preview img {
-    width:         120px;
-    height:        120px;
-    object-fit:    cover;
+.ctz-select, .ctz-input {
+    background: var(--ctz-surface);
+    border: 1px solid var(--ctz-border);
+    color: var(--ctz-text);
+    padding: 6px;
+    font-size: 12px;
     border-radius: var(--ctz-radius);
-    border:        1px solid var(--ctz-border);
-}
-
-/* ─── Settings panel ─────────────────────────────────────────────────────────── */
-.ctz-settings-panel { display: flex; flex-direction: column; gap: 16px; }
-
-/* ─── Shared form elements ───────────────────────────────────────────────────── */
-.ctz-section { display: flex; flex-direction: column; gap: 8px; }
-
-.ctz-section-title {
-    font-size:     13px;
-    font-weight:   600;
-    color:         var(--ctz-accent);
-    margin:        0 0 4px;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-}
-
-.ctz-form-row {
-    display:     flex;
-    align-items: center;
-    gap:         10px;
-}
-
-.ctz-label {
-    width:      130px;
-    flex-shrink: 0;
-    font-size:  12px;
-    color:      var(--ctz-muted);
-}
-
-.ctz-select,
-.ctz-input {
-    background:    var(--ctz-surface);
-    border:        1px solid var(--ctz-border);
-    border-radius: var(--ctz-radius);
-    color:         var(--ctz-text);
-    font-size:     12px;
-    padding:       4px 8px;
-    flex:          1;
-}
-
-.ctz-select {
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c7086' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    background-size: 14px;
-    padding-right: 30px;
-    cursor: pointer;
-}
-
-.ctz-input-sm { max-width: 80px; flex: unset; }
-
-.ctz-textarea {
-    resize:     vertical;
-    min-height: 60px;
-    font-family: inherit;
+    flex: 1;
 }
 
 .ctz-btn {
-    background:    var(--ctz-surface);
-    border:        1px solid var(--ctz-border);
+    background: var(--ctz-surface);
+    border: 1px solid var(--ctz-border);
+    color: var(--ctz-text);
+    padding: 8px 16px;
     border-radius: var(--ctz-radius);
-    color:         var(--ctz-text);
-    cursor:        pointer;
-    font-size:     12px;
-    padding:       5px 12px;
-    transition:    border-color .15s;
-    white-space:   nowrap;
+    cursor: pointer;
+    font-size: 12px;
+}
+.ctz-btn-primary { background: var(--ctz-accent); color: var(--ctz-bg); font-weight: bold; border: none; }
+.ctz-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ctz-dismiss-handle {
+    margin-top: 12px;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--ctz-border);
+    color: var(--ctz-muted);
+    width: 100%;
+    cursor: pointer;
+    font-size: 11px;
+    text-transform: uppercase;
 }
 
-.ctz-btn:hover         { border-color: var(--ctz-accent); }
-.ctz-btn:disabled      { opacity: .4; cursor: not-allowed; }
+/* ─── Forge Strip ──────────────────────────────────────────────────────────── */
+.ctz-forge-strip {
+    padding: 12px 16px;
+    background: var(--ctz-surface);
+    border-bottom: 1px solid var(--ctz-border);
+    font-size: 12px;
+}
+.ctz-forge-meta { display: block; margin-bottom: 2px; }
 
-.ctz-btn-primary {
-    background:    var(--ctz-accent);
-    border-color:  var(--ctz-accent);
-    color:         #1e1e2e;
-    font-weight:   600;
+.ctz-muted { color: var(--ctz-muted); font-size: 12px; }
+.ctz-hidden { display: none !important; }
+
+/* ─── Collapsible Details for Settings Drawer ────────────────────────────── */
+.ctz-settings-detail {
+    border-bottom: 1px solid var(--ctz-border);
+    padding: 8px 0;
 }
 
-.ctz-btn-primary:hover { background: var(--ctz-accent-hover); border-color: var(--ctz-accent-hover); }
+.ctz-settings-detail[open] {
+    padding-bottom: 12px;
+}
 
-.ctz-btn-sm { font-size: 11px; padding: 3px 8px; }
+.ctz-settings-detail .ctz-section-title {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+}
 
-.ctz-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--ctz-accent); }
-.ctz-hint     { font-size: 11px; color: var(--ctz-muted); }
-.ctz-muted    { color: var(--ctz-muted); font-size: 12px; }
-.ctz-hidden   { display: none !important; }
+.ctz-settings-detail .ctz-section-title::after {
+    content: '▼';
+    font-size: 10px;
+    color: var(--ctz-muted);
+    transition: transform 0.2s;
+}
 
-.ctz-target-controls { display: flex; flex: 1; gap: 8px; }
+.ctz-settings-detail[open] .ctz-section-title::after {
+    transform: rotate(180deg);
+}
+
+.ctz-detail-content {
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}

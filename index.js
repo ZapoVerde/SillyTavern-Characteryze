@@ -1,15 +1,15 @@
 /**
  * @file data/default-user/extensions/characteryze/index.js
- * @stamp {"utc":"2026-04-29T10:20:00.000Z"}
- * @version 1.1.0
+ * @stamp {"utc":"2026-04-30T10:00:00.000Z"}
+ * @version 2.0.0
  * @architectural-role IO — Extension Entry Point
  * @description
- * Bootstraps Characteryze. Registers the settings panel in the ST extensions
- * drawer, initialises extension_settings, and wires the Launch / Close buttons.
+ * Bootstraps Characteryze. Injects the persistent Floating Action Button (FAB)
+ * into the DOM and registers the settings panel in the ST extensions drawer.
  *
- * The launch sequence now requires a manually created Host character to be 
- * present in the user's roster, enforcing session isolation without 
- * programmatic character injection.
+ * The launch sequence now acts as a toggle. When idle, clicking the FAB triggers
+ * the Forge environment swap. When active, it simply toggles the sidebar visibility,
+ * allowing the user to interact with the native ST interface.
  *
  * @api-declaration
  * (none — module-level side-effects only, executed on ST load)
@@ -18,8 +18,8 @@
  *   assertions:
  *     purity: IO
  *     state_ownership: []
- *     external_io: [DOM, extension_settings init, ST event bindings,
- *                   saveSettingsDebounced, toastr]
+ *     external_io: [DOM (FAB & drawer injection), extension_settings init, 
+ *                   ST event bindings, saveSettingsDebounced, toastr]
  */
 
 import { extension_settings } from '../../../extensions.js';
@@ -41,8 +41,9 @@ import {
     initTabBar,
     registerPanel,
     registerTabActivate,
-    showOverlay,
-    hideOverlay,
+    showSidebar,
+    hideSidebar,
+    toggleSidebar,
     activateTab,
 } from './tab-bar.js';
 import { mountPanel as mountHome }      from './home-panel.js';
@@ -81,6 +82,7 @@ function _initSettings() {
 jQuery(() => {
     _initSettings();
     initProfileManager();
+    _injectFAB();
     _injectDrawer();
     _wireDrawerButtons();
     eventSource.on(event_types.GENERATION_AFTER_COMMANDS, _onGenerationAfterCommands);
@@ -100,83 +102,27 @@ function _onGenerationAfterCommands(_type, _opts, dryRun) {
     if (escaped !== textarea.value) textarea.value = escaped;
 }
 
-// ─── Drawer button wiring ─────────────────────────────────────────────────────
+// ─── DOM Injection: FAB & Drawer ──────────────────────────────────────────────
 
-function _wireDrawerButtons() {
-    $(document).on('click', '#ctz-launch-btn', _onLaunch);
-    $(document).on('click', '#ctz-close-btn',  _onClose);
-}
+function _injectFAB() {
+    if (document.getElementById('ctz-fab')) return;
 
-// ─── Launch sequence ──────────────────────────────────────────────────────────
+    const fab = document.createElement('button');
+    fab.id        = 'ctz-fab';
+    fab.className = 'ctz-fab ctz-fab-idle';
+    fab.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
+    fab.title     = 'Launch Characteryze';
+    document.body.appendChild(fab);
 
-async function _onLaunch() {
-    log(TAG, 'Launch');
-    try {
-        const ctx = SillyTavern.getContext();
-        const hostExists = ctx.characters.some(c => c.name === CTZ_HOST_CHAR_NAME);
-
-        if (!hostExists) {
-            toastr.error(
-                `Host character "${CTZ_HOST_CHAR_NAME}" not found. ` +
-                `Please create an empty character with this name first.`,
-                'Characteryze',
-                { timeOut: 10000 }
-            );
-            return;
+    fab.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!isUiActive()) {
+            await _onLaunch();
+        } else {
+            toggleSidebar();
         }
-
-        pruneOldSessions();
-
-        // Build tab bar once; subsequent launches reuse it
-        initTabBar(_onClose);
-        _mountPanels();
-
-        setUiActive(true);
-        await enterForge();
-        showOverlay();
-        activateTab('home');
-        log(TAG, 'Overlay active');
-    } catch (err) {
-        error(TAG, 'Launch failed', err);
-        toastr.error('Characteryze failed to launch.');
-        setUiActive(false);
-    }
+    });
 }
-
-// ─── Exit sequence ────────────────────────────────────────────────────────────
-
-async function _onClose() {
-    log(TAG, 'Close');
-    try {
-        hideOverlay();
-        await exitForge();
-    } catch (err) {
-        error(TAG, 'Close sequence error', err);
-        // exitForge sets _uiActive false in its finally block, but if it
-        // throws before reaching that point, clear the flag here as a fallback.
-        setUiActive(false);
-    }
-}
-
-// ─── Panel mounting ───────────────────────────────────────────────────────────
-
-function _mountPanels() {
-    registerPanel('home', container => mountHome(container, {
-        activateTab,
-        onEnterForge: () => {
-            // Switch to forge tab
-            activateTab('forge');
-        },
-    }));
-    registerPanel('forge',     container => mountForge(container));
-    registerPanel('workbench', container => mountWorkbench(container));
-    registerTabActivate('workbench', refreshWorkbench);
-    registerPanel('portrait',  container => mountPortrait(container));
-    registerPanel('rulesets',  container => mountRulesets(container));
-    registerPanel('settings',  container => mountSettings(container, 'ctz'));
-}
-
-// ─── Drawer HTML + settings injection ────────────────────────────────────────
 
 function _injectDrawer() {
     const wrapper = document.createElement('div');
@@ -206,4 +152,96 @@ function _injectDrawer() {
     // Mount settings panel into drawer with 'ctzd' prefix (drawer instance)
     const drawerSlot = document.getElementById('ctz-drawer-settings');
     if (drawerSlot) mountSettings(drawerSlot, 'ctzd');
+}
+
+function _wireDrawerButtons() {
+    $(document).on('click', '#ctz-launch-btn', async () => {
+        if (isUiActive()) toggleSidebar();
+        else await _onLaunch();
+    });
+    $(document).on('click', '#ctz-close-btn',  _onClose);
+}
+
+// ─── Launch sequence ──────────────────────────────────────────────────────────
+
+async function _onLaunch() {
+    log(TAG, 'Launch');
+    try {
+        const ctx = SillyTavern.getContext();
+        const hostExists = ctx.characters.some(c => c.name === CTZ_HOST_CHAR_NAME);
+
+        if (!hostExists) {
+            toastr.error(
+                `Host character "${CTZ_HOST_CHAR_NAME}" not found. ` +
+                `Please create an empty character with this name first.`,
+                'Characteryze',
+                { timeOut: 10000 }
+            );
+            return;
+        }
+
+        pruneOldSessions();
+
+        // Build tab bar once; subsequent launches reuse it
+        initTabBar(_onClose);
+        _mountPanels();
+
+        setUiActive(true);
+        await enterForge();
+        showSidebar();
+        activateTab('home');
+
+        const fab = document.getElementById('ctz-fab');
+        if (fab) {
+            fab.classList.remove('ctz-fab-idle');
+            fab.classList.add('ctz-fab-active');
+            fab.title = 'Toggle Characteryze Sidebar';
+        }
+
+        log(TAG, 'Sidebar active');
+    } catch (err) {
+        error(TAG, 'Launch failed', err);
+        toastr.error('Characteryze failed to launch.');
+        setUiActive(false);
+    }
+}
+
+// ─── Exit sequence ────────────────────────────────────────────────────────────
+
+async function _onClose() {
+    log(TAG, 'Close');
+    try {
+        hideSidebar();
+        await exitForge();
+    } catch (err) {
+        error(TAG, 'Close sequence error', err);
+        // exitForge sets _uiActive false in its finally block, but if it
+        // throws before reaching that point, clear the flag here as a fallback.
+        setUiActive(false);
+    } finally {
+        const fab = document.getElementById('ctz-fab');
+        if (fab) {
+            fab.classList.remove('ctz-fab-active');
+            fab.classList.add('ctz-fab-idle');
+            fab.title = 'Launch Characteryze';
+        }
+    }
+}
+
+// ─── Panel mounting ───────────────────────────────────────────────────────────
+
+function _mountPanels() {
+    registerPanel('home', container => mountHome(container, {
+        activateTab,
+        onEnterForge: () => {
+            // Switch to forge tab
+            activateTab('forge');
+        },
+    }));
+    registerPanel('forge',     container => mountForge(container));
+    registerPanel('workbench', container => mountWorkbench(container));
+    registerTabActivate('workbench', refreshWorkbench);
+    registerPanel('portrait',  container => mountPortrait(container));
+    registerPanel('rulesets',  container => mountRulesets(container));
+    registerPanel('settings',  container => mountSettings(container, 'ctz'));
 }
