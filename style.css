@@ -46,7 +46,7 @@
     color: #1e1e2e;
     border: 2px solid rgba(255,255,255,0.1);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    z-index: 801; /* Higher than ST top-bar but allows sliding */
+    z-index: 601; /* Higher than ST top-bar but allows sliding */
     cursor: pointer;
     display: flex;
     align-items: center;

@@ -1,16 +1,15 @@
 /**
  * @file data/default-user/extensions/characteryze/profile-manager.js
- * @stamp {"utc":"2026-04-30T10:30:00.000Z"}
- * @version 2.0.0
+ * @stamp {"utc":"2026-05-04T13:10:00.000Z"}
+ * @version 2.1.0
  * @architectural-role Stateful — Connection Profile Lifecycle
  * @description
  * Owns the Forge connection profile swap cycle. Manages the "Permasave" 
  * (the authoritative restore target). On launch, it captures the current 
  * active profile and swaps to the user-selected Forge Engine.
  *
- * This version removes all profile-creation logic. It assumes the user 
- * has manually created a connection profile and selected it in the 
- * Characteryze settings.
+ * Updated to trigger session cleanup on exit, automatically deleting
+ * empty Forge chats.
  *
  * @api-declaration
  * initProfileManager()   — register CONNECTION_PROFILE_LOADED + CHAT_LOADED listeners
@@ -26,7 +25,7 @@
  *     state_ownership: [_lastKnownProfile, _uiActive, _savedListeners]
  *     external_io: [executeSlashCommandsWithOptions, saveSettingsDebounced,
  *                   extension_settings write, ConnectionManagerRequestService, 
- *                   eventSource.events (direct mutation)]
+ *                   eventSource.events (direct mutation), cleanupCurrentSessionIfEmpty]
  */
 
 import { extension_settings }    from '../../../extensions.js';
@@ -35,6 +34,7 @@ import { eventSource, event_types }                  from '../../../../script.js
 import { log, warn, error }                          from './log.js';
 import { CTZ_EXT_NAME }                              from './defaults.js';
 import { ConnectionManagerRequestService }           from '../../shared.js';
+import { cleanupCurrentSessionIfEmpty }              from './session-manager.js';
 
 const TAG = 'Profile';
 
@@ -168,6 +168,9 @@ export async function exitForge() {
     const permasave = settings?.permasave_profile;
 
     try {
+        // Cleanup empty sessions while still in Forge profile context
+        await cleanupCurrentSessionIfEmpty();
+
         if (permasave) {
             log(TAG, 'Exiting Forge: restoring profile:', permasave);
             await _applyProfile(permasave);

@@ -1,14 +1,13 @@
 /**
  * @file data/default-user/extensions/characteryze/session-manager.js
- * @stamp {"utc":"2026-04-30T00:00:00.000Z"}
+ * @stamp {"utc":"2026-05-04T13:00:00.000Z"}
  * @architectural-role Stateful — Forge Session Lifecycle
  * @description
  * Owns the active workspace object and the known_sessions index. Handles
  * session creation, loading, and draft state persistence.
  *
- * Decoupled (Phase 3): sessions no longer own a canvas type. Canvas and
- * target are independent workspace state set by the Home panel directly.
- * All canvas types now use composite draft keys (filename::canvas::target).
+ * Updated with `cleanupCurrentSessionIfEmpty` to autodelete sessions that
+ * contain no user-authored content, preventing file accumulation.
  *
  * @api-declaration
  * newForgeSession(name?)                — create new chat, record session; returns entry
@@ -17,6 +16,7 @@
  * pruneOldSessions()                    — trim to max_saved limit
  * renameSession(filename, newName)      — update session_name in known_sessions
  * deleteSession(filename)               — remove session record from known_sessions
+ * cleanupCurrentSessionIfEmpty()        — wipes current chat file if no user messages exist
  * getWorkspace()                        — returns current workspace snapshot
  * setWorkspaceCanvas(canvasType)        — update canvas type
  * setWorkspaceTarget(target)            — update target entity
@@ -29,13 +29,13 @@
  *     purity: Stateful / IO
  *     state_ownership: [_workspace]
  *     external_io: [SillyTavern context, extension_settings write,
- *                   saveSettingsDebounced, toastr]
+ *                   saveSettingsDebounced, toastr, /deletechat slash command]
  */
 
 import { extension_settings }    from '../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../script.js';
 import { eventSource, event_types, doNewChat }        from '../../../../script.js';
-import { log }                                          from './log.js';
+import { log, warn }                                    from './log.js';
 import {
     CTZ_EXT_NAME,
     CTZ_HOST_CHAR_NAME,
@@ -53,8 +53,6 @@ let _workspace = {
 
 /**
  * Creates a new chat session for the Forge.
- * Canvas and target are already set on _workspace by the Home panel before
- * this is called; this function only handles the ST chat lifecycle.
  */
 export async function newForgeSession(sessionName = null) {
     const charIdx = _findInternalCharIdx();
@@ -63,7 +61,6 @@ export async function newForgeSession(sessionName = null) {
     }
 
     const ctx = SillyTavern.getContext();
-
     const hostName = ctx.characters[charIdx].name;
 
     if (ctx.characterId !== charIdx) {
@@ -88,8 +85,6 @@ export async function newForgeSession(sessionName = null) {
 
 /**
  * Loads an existing Forge session chat.
- * Only updates _workspace.filename — canvas and target remain as configured
- * by the Home panel dropdowns.
  */
 export async function loadForgeSession(filename) {
     const charIdx = _findInternalCharIdx();
@@ -138,6 +133,36 @@ export function deleteSession(filename) {
     saveSettingsDebounced();
 }
 
+/**
+ * Scans the current active chat for user messages. If none are found,
+ * deletes the chat file and removes the session from Characteryze metadata.
+ */
+export async function cleanupCurrentSessionIfEmpty() {
+    const ctx = SillyTavern.getContext();
+    const chat = ctx.chat || [];
+
+    // An empty session is defined as one where the user hasn't sent any messages.
+    // System setup or greetings are ignored.
+    const hasUserMessage = chat.some(m => m.is_user);
+
+    if (!hasUserMessage && _workspace.filename) {
+        log(TAG, 'Cleaning up empty session:', _workspace.filename);
+        const filenameToDelete = _workspace.filename;
+
+        // 1. Metadata removal
+        deleteSession(filenameToDelete);
+
+        // 2. Physical file removal via ST native command
+        try {
+            await ctx.executeSlashCommandsWithOptions('/deletechat');
+        } catch (err) {
+            warn(TAG, 'Failed to execute /deletechat during cleanup:', err);
+        }
+
+        _workspace.filename = null;
+    }
+}
+
 // ─── Workspace ────────────────────────────────────────────────────────────────
 
 export function getWorkspace() {
@@ -154,11 +179,6 @@ export function setWorkspaceTarget(target) {
 
 // ─── Draft state ──────────────────────────────────────────────────────────────
 
-/**
- * Composite key for all canvas types so switching targets within a session
- * never overwrites a different target's draft.
- * explicitTarget is passed by clearDraftState for Save-As safety (ruleset rename).
- */
 function _getDraftKey(filename, explicitTarget) {
     const canvas = _workspace.canvas_type ?? 'unknown';
     const target = explicitTarget !== undefined
