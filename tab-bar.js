@@ -1,16 +1,14 @@
 /**
  * @file data/default-user/extensions/characteryze/tab-bar.js
- * @stamp {"utc":"2026-04-30T10:10:00.000Z"}
- * @version 3.0.0
+ * @stamp {"utc":"2026-05-04T12:05:00.000Z"}
+ * @version 3.1.0
  * @architectural-role IO — Sidebar UI
  * @description
  * Renders and manages the Characteryze Sidebar. Injects the fixed sidebar container
  * into the ST DOM, renders tab buttons, and shows/hides panel containers.
  *
- * 'forge' is a special navigation target. Because the UI is now a floating sidebar,
- * activating 'forge' (e.g., via "Return to Chat" buttons) simply hides the sidebar
- * so the user can interact with the native SillyTavern chat UI. The FAB remains 
- * to bring it back.
+ * Includes "click away to close" logic: clicks outside the sidebar (and not on
+ * the FAB) will trigger the sidebar to hide.
  *
  * @api-declaration
  * initTabBar(onExit)              — inject sidebar, wire tabs; onExit called when X clicked
@@ -25,7 +23,7 @@
  *   assertions:
  *     purity: IO
  *     state_ownership: [_activeTab, _panels]
- *     external_io: [DOM manipulation, session-manager read]
+ *     external_io: [DOM manipulation, session-manager read, document click listener]
  */
 
 import { log }          from './log.js';
@@ -132,6 +130,23 @@ function _injectSidebar() {
         
     // Prevent clicks inside the sidebar from bleeding through to SillyTavern
     sidebar.addEventListener('click', e => e.stopPropagation());
+
+    // Click away to close: Listen for clicks on the document
+    // Clicks inside the sidebar are stopped by stopPropagation above.
+    document.addEventListener('click', (e) => {
+        const sidebarEl = document.getElementById('ctz-sidebar');
+        const fabEl     = document.getElementById('ctz-fab');
+
+        // Only act if the sidebar is currently open
+        if (sidebarEl && !sidebarEl.classList.contains('ctz-hidden')) {
+            // Do not close if the user clicked the FAB (it has its own toggle logic)
+            if (fabEl && fabEl.contains(e.target)) {
+                return;
+            }
+            log(TAG, 'Outside click detected, hiding sidebar');
+            hideSidebar();
+        }
+    });
 }
 
 function _buildSidebarHTML() {

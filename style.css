@@ -1,12 +1,22 @@
-/* ============================================================================
-   Characteryze — style.css
-   stamp: 2026-04-30T10:20:00.000Z
-   Architectural Role: Pure — Styling Definitions
-   Description:
-   Defines the visual identity for Characteryze. Transitions the UI from a 
-   full-screen overlay to a non-blocking sidebar and a Floating Action Button (FAB).
-   Uses ST native CSS tokens for color harmony.
-   ============================================================================ */
+/**
+ * @file data/default-user/extensions/characteryze/style.css
+ * @stamp {"utc":"2026-05-04T12:15:00.000Z"}
+ * @architectural-role Pure — Styling Definitions
+ * @description
+ * Defines the visual identity for Characteryze. Transitions the UI from a 
+ * full-screen overlay to a non-blocking sidebar and a Floating Action Button (FAB).
+ * Uses ST native CSS tokens for color harmony.
+ * Updated: FAB uses absolute positioning to follow top-bar visibility.
+ *
+ * @api-declaration
+ * (none - pure CSS)
+ *
+ * @contract
+ *   assertions:
+ *     purity: Pure
+ *     state_ownership: []
+ *     external_io:[]
+ */
 
 :root {
     --ctz-bg:           #1e1e2e;
@@ -19,15 +29,16 @@
     --ctz-danger:       #f38ba8;
     --ctz-success:      #a6e3a1;
     --ctz-radius:       6px;
-    --ctz-sidebar-w:    320px;
+    --ctz-sidebar-w:    380px;
     --ctz-fab-size:     44px;
 }
 
 /* ─── Floating Action Button (FAB) ────────────────────────────────────────── */
 .ctz-fab {
-    position: fixed;
-    top: 12px;
-    left: 12px;
+    position: absolute;
+    /* Anchor to bottom of top-bar with a small offset */
+    top: calc(100% + 8px);
+    left: 8px;
     width: var(--ctz-fab-size);
     height: var(--ctz-fab-size);
     border-radius: 50%;
@@ -35,7 +46,7 @@
     color: #1e1e2e;
     border: 2px solid rgba(255,255,255,0.1);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    z-index: 800;
+    z-index: 2001; /* Higher than ST top-bar but allows sliding */
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -66,9 +77,12 @@
     top: 0;
     left: 0;
     width: var(--ctz-sidebar-w);
-    height: 100vh;
+    height: max-content;
+    max-height: 100vh;
     background: var(--ctz-bg);
     border-right: 1px solid var(--ctz-border);
+    border-bottom: 1px solid var(--ctz-border);
+    border-bottom-right-radius: var(--ctz-radius);
     box-shadow: 4px 0 20px rgba(0,0,0,0.5);
     z-index: 850;
     display: flex;

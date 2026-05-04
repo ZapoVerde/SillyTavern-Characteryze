@@ -112,7 +112,10 @@ function _injectFAB() {
     fab.className = 'ctz-fab ctz-fab-idle';
     fab.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
     fab.title     = 'Launch Characteryze';
-    document.body.appendChild(fab);
+    
+    // Inject into SillyTavern's top-bar so the FAB slides/hides with the menu
+    const parent = document.getElementById('top-bar') || document.body;
+    parent.appendChild(fab);
 
     fab.addEventListener('click', async (e) => {
         e.stopPropagation();
