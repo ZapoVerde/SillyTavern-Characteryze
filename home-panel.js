@@ -1,18 +1,16 @@
 /**
  * @file data/default-user/extensions/characteryze/home-panel.js
- * @stamp {"utc":"2026-04-30T00:00:00.000Z"}
- * @version 2.1.0
+ * @stamp {"utc":"2026-05-04T21:15:00.000Z"}
+ * @version 2.2.0
  * @architectural-role IO — Home Panel UI (Ignition Panel)
  * @description
- * Renders the Home tab as a decoupled Ignition Panel: an independent
- * Session dropdown and a Focus section (Canvas + Target) that update
- * workspace state immediately on change.
- *
- * Session and Focus are orthogonal: any canvas/target combo can be used
- * with any historical session, or a brand-new one.
+ * Renders the Home tab as a decoupled Ignition Panel. 
+ * 
+ * Updated: Added "Leave Forge" button side-by-side with "Enter Forge".
+ * Buttons are state-aware and reflect the current active environment.
  *
  * @api-declaration
- * mountPanel(container, deps) — mount panel; deps provides { activateTab, onEnterForge }
+ * mountPanel(container, deps) — mount panel; deps provides { activateTab, onEnterForge, onLeaveForge }
  * refreshPanel()              — re-render in place
  *
  * @contract
@@ -25,9 +23,10 @@
 import { log, error }             from './log.js';
 import { CANVAS_TYPES, CTZ_EXT_NAME } from './defaults.js';
 import { system_prompts }         from '../../../../scripts/sysprompt.js';
-import { openai_setting_names }  from '../../../../scripts/openai.js';
+import { openai_setting_names }   from '../../../../scripts/openai.js';
 import { extension_settings }     from '../../../extensions.js';
 import { saveSettingsDebounced }  from '../../../../script.js';
+import { isUiActive }             from './profile-manager.js';
 import {
     listSessions,
     newForgeSession,
@@ -40,16 +39,18 @@ import {
 
 const TAG = 'HomePanel';
 
-let _container    = null;
-let _activateTab  = null;
-let _onEnterForge = null;
+let _container     = null;
+let _activateTab   = null;
+let _onEnterForge  = null;
+let _onLeaveForge  = null;
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 
 export function mountPanel(container, deps = {}) {
-    _container    = container;
-    _activateTab  = deps.activateTab  ?? null;
-    _onEnterForge = deps.onEnterForge ?? null;
+    _container     = container;
+    _activateTab   = deps.activateTab   ?? null;
+    _onEnterForge  = deps.onEnterForge  ?? null;
+    _onLeaveForge  = deps.onLeaveForge  ?? null;
     _render();
     log(TAG, 'Mounted');
 }
@@ -84,6 +85,8 @@ function _buildHTML() {
     const chatProfileOptions = Object.keys(openai_setting_names || {})
         .map(n => `<option value="${_esc(n)}">${_esc(n)}</option>`)
         .join('');
+
+    const inForge = isUiActive();
 
     return `
         <div class="ctz-home-panel">
@@ -141,9 +144,14 @@ function _buildHTML() {
                 </div>
             </section>
 
-            <button id="ctz-enter-forge-btn" class="ctz-btn ctz-btn-primary ctz-btn-block">
-                Enter Forge
-            </button>
+            <div class="ctz-forge-actions">
+                <button id="ctz-enter-forge-btn" class="ctz-btn ctz-btn-primary" ${inForge ? 'disabled' : ''}>
+                    Enter Forge
+                </button>
+                <button id="ctz-leave-forge-btn" class="ctz-btn ctz-btn-danger" ${!inForge ? 'disabled' : ''}>
+                    Leave Forge
+                </button>
+            </div>
 
             <button class="ctz-dismiss-handle" title="Return to chat">▲ Return to Chat</button>
         </div>`;
@@ -284,15 +292,36 @@ function _wire() {
             } else {
                 await newForgeSession();
             }
-            _activateTab?.('forge');
             _onEnterForge?.();
             log(TAG, filename ? 'Session loaded' : 'New session started', '→ Forge');
+            refreshPanel(); // Update button states
         } catch (err) {
             error(TAG, 'Enter Forge failed', err);
             toastr.error(err.message || 'Failed to enter Forge.');
+            refreshPanel();
         } finally {
             enterBtn.disabled = false;
             enterBtn.textContent = orig;
+        }
+    });
+
+    // ── Leave Forge ────────────────────────────────────────────────────────────
+    const leaveBtn = _container.querySelector('#ctz-leave-forge-btn');
+    leaveBtn?.addEventListener('click', async () => {
+        const orig = leaveBtn.textContent;
+        leaveBtn.disabled = true;
+        leaveBtn.textContent = 'Restoring…';
+        try {
+            await _onLeaveForge?.();
+            log(TAG, 'Left Forge → Environment restored');
+            refreshPanel(); // Update button states
+        } catch (err) {
+            error(TAG, 'Leave Forge failed', err);
+            toastr.error('Failed to restore environment.');
+            refreshPanel();
+        } finally {
+            leaveBtn.disabled = false;
+            leaveBtn.textContent = orig;
         }
     });
 }

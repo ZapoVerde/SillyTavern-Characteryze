@@ -1,12 +1,13 @@
 /**
  * @file data/default-user/extensions/characteryze/defaults.js
- * @stamp {"utc":"2026-05-04T13:20:00.000Z"}
- * @version 1.6.0
+ * @stamp {"utc":"2026-05-04T21:00:00.000Z"}
+ * @version 1.7.0
  * @architectural-role Pure — Static Configuration
  * @description
  * Seed constants for Characteryze. Defines naming conventions, canvas schemas,
- * and Pollinations API configuration. Aligned with Vistalyze for verified
- * image generation pathways. Updated for Forge Preset management.
+ * and Pollinations API configuration.
+ *
+ * Updated: Added isEnabled for master toggle functionality.
  *
  * @api-declaration
  * CTZ_EXT_NAME, CTZ_FORGE_PROFILE_NAME, CTZ_HOST_CHAR_NAME
@@ -90,6 +91,7 @@ export const DEFAULT_PORTRAIT_PROMPT_TEMPLATE =
 
 /** Shape of extension_settings.characteryze — written on first init. */
 export const DEFAULT_SETTINGS = Object.freeze({
+    isEnabled:          true,     // Master toggle for FAB visibility
     permasave_profile:   null,
     permasave_preset:    null,
     forge_profile_name: CTZ_FORGE_PROFILE_NAME,

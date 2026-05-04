@@ -1,12 +1,13 @@
 /**
  * @file data/default-user/extensions/characteryze/style.css
- * @stamp {"utc":"2026-05-04T12:15:00.000Z"}
+ * @stamp {"utc":"2026-05-04T21:20:00.000Z"}
+ * @version 1.1.0
  * @architectural-role Pure — Styling Definitions
  * @description
- * Defines the visual identity for Characteryze. Transitions the UI from a 
- * full-screen overlay to a non-blocking sidebar and a Floating Action Button (FAB).
- * Uses ST native CSS tokens for color harmony.
- * Updated: FAB uses absolute positioning to follow top-bar visibility.
+ * Defines the visual identity for Characteryze.
+ * 
+ * Updated: Added .ctz-forge-actions, .ctz-btn-danger, and .ctz-master-toggle 
+ * to support the Master Enable workflow and dual-button ignition panel.
  *
  * @api-declaration
  * (none - pure CSS)
@@ -36,7 +37,6 @@
 /* ─── Floating Action Button (FAB) ────────────────────────────────────────── */
 .ctz-fab {
     position: absolute;
-    /* Anchor to bottom of top-bar with a small offset */
     top: calc(100% + 8px);
     left: 8px;
     width: var(--ctz-fab-size);
@@ -46,7 +46,7 @@
     color: #1e1e2e;
     border: 2px solid rgba(255,255,255,0.1);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    z-index: 601; /* Higher than ST top-bar but allows sliding */
+    z-index: 2001; 
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -169,47 +169,6 @@
     margin-bottom: 8px;
 }
 
-/* ─── Workbench Specifics ──────────────────────────────────────────────────── */
-.ctz-workbench { display: flex; flex-direction: column; gap: 12px; }
-
-.ctz-block-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid var(--ctz-border);
-    border-radius: var(--ctz-radius);
-    padding: 4px;
-}
-
-.ctz-block-item {
-    padding: 6px 10px;
-    background: var(--ctz-surface);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    border: 1px solid transparent;
-}
-.ctz-block-item:hover { border-color: var(--ctz-accent); }
-
-.ctz-block-lang { color: var(--ctz-accent); font-weight: bold; margin-right: 6px; }
-
-.ctz-diff-panes { display: flex; flex-direction: column; gap: 8px; }
-
-.ctz-pane-text {
-    width: 100%;
-    min-height: 120px;
-    background: var(--ctz-surface);
-    color: var(--ctz-text);
-    border: 1px solid var(--ctz-border);
-    border-radius: var(--ctz-radius);
-    font-family: monospace;
-    font-size: 12px;
-    padding: 8px;
-    resize: vertical;
-}
-
 /* ─── Forms & Buttons ──────────────────────────────────────────────────────── */
 .ctz-form-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .ctz-label { width: 100px; flex-shrink: 0; font-size: 12px; color: var(--ctz-muted); }
@@ -234,7 +193,29 @@
     font-size: 12px;
 }
 .ctz-btn-primary { background: var(--ctz-accent); color: var(--ctz-bg); font-weight: bold; border: none; }
+.ctz-btn-danger { background: var(--ctz-danger); color: var(--ctz-bg); font-weight: bold; border: none; }
 .ctz-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ctz-forge-actions {
+    display: flex;
+    gap: 8px;
+}
+.ctz-forge-actions .ctz-btn {
+    flex: 1;
+}
+
+.ctz-master-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    background: var(--ctz-surface);
+    border-radius: var(--ctz-radius);
+    margin-bottom: 10px;
+    border: 1px solid var(--ctz-border);
+}
 
 .ctz-dismiss-handle {
     margin-top: 12px;
@@ -249,51 +230,52 @@
     text-transform: uppercase;
 }
 
-/* ─── Forge Strip ──────────────────────────────────────────────────────────── */
-.ctz-forge-strip {
-    padding: 12px 16px;
-    background: var(--ctz-surface);
-    border-bottom: 1px solid var(--ctz-border);
-    font-size: 12px;
-}
-.ctz-forge-meta { display: block; margin-bottom: 2px; }
-
 .ctz-muted { color: var(--ctz-muted); font-size: 12px; }
 .ctz-hidden { display: none !important; }
 
-/* ─── Collapsible Details for Settings Drawer ────────────────────────────── */
-.ctz-settings-detail {
-    border-bottom: 1px solid var(--ctz-border);
-    padding: 8px 0;
-}
-
-.ctz-settings-detail[open] {
-    padding-bottom: 12px;
-}
-
-.ctz-settings-detail .ctz-section-title {
-    cursor: pointer;
-    list-style: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0;
-}
-
-.ctz-settings-detail .ctz-section-title::after {
-    content: '▼';
-    font-size: 10px;
-    color: var(--ctz-muted);
-    transition: transform 0.2s;
-}
-
-.ctz-settings-detail[open] .ctz-section-title::after {
-    transform: rotate(180deg);
-}
-
-.ctz-detail-content {
-    padding-top: 8px;
+/* ─── Remaining Sidebar Content Areas ... ─── */
+.ctz-block-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    padding: 4px;
 }
+
+.ctz-block-item {
+    padding: 6px 10px;
+    background: var(--ctz-surface);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    border: 1px solid transparent;
+}
+.ctz-block-item:hover { border-color: var(--ctz-accent); }
+.ctz-block-lang { color: var(--ctz-accent); font-weight: bold; margin-right: 6px; }
+
+.ctz-diff-panes { display: flex; flex-direction: column; gap: 8px; }
+
+.ctz-pane-text {
+    width: 100%;
+    min-height: 120px;
+    background: var(--ctz-surface);
+    color: var(--ctz-text);
+    border: 1px solid var(--ctz-border);
+    border-radius: var(--ctz-radius);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 8px;
+    resize: vertical;
+}
+
+.ctz-settings-detail { border-bottom: 1px solid var(--ctz-border); padding: 8px 0; }
+.ctz-settings-detail[open] { padding-bottom: 12px; }
+.ctz-settings-detail .ctz-section-title {
+    cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0;
+}
+.ctz-settings-detail .ctz-section-title::after { content: '▼'; font-size: 10px; color: var(--ctz-muted); transition: transform 0.2s; }
+.ctz-settings-detail[open] .ctz-section-title::after { transform: rotate(180deg); }
+.ctz-detail-content { padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }

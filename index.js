@@ -1,15 +1,14 @@
 /**
  * @file data/default-user/extensions/characteryze/index.js
- * @stamp {"utc":"2026-04-30T10:00:00.000Z"}
- * @version 2.0.0
+ * @stamp {"utc":"2026-05-04T21:10:00.000Z"}
+ * @version 2.1.0
  * @architectural-role IO — Extension Entry Point
  * @description
  * Bootstraps Characteryze. Injects the persistent Floating Action Button (FAB)
  * into the DOM and registers the settings panel in the ST extensions drawer.
  *
- * The launch sequence now acts as a toggle. When idle, clicking the FAB triggers
- * the Forge environment swap. When active, it simply toggles the sidebar visibility,
- * allowing the user to interact with the native ST interface.
+ * Updated: Refactored extension drawer to use a Master Enable toggle instead
+ * of Launch/Close buttons. FAB visibility is now tied to this toggle.
  *
  * @api-declaration
  * (none — module-level side-effects only, executed on ST load)
@@ -91,9 +90,6 @@ jQuery(() => {
 
 // ─── Macro escape hook ────────────────────────────────────────────────────────
 
-// Fires inside Generate() after slash-command processing, before the textarea
-// is read and passed to sendMessageAsUser(). We transform \{{ → {ZWS{ here so
-// substituteParams never sees a bare {{ to replace.
 function _onGenerationAfterCommands(_type, _opts, dryRun) {
     if (!isUiActive() || dryRun) return;
     const textarea = document.querySelector('#send_textarea');
@@ -110,6 +106,12 @@ function _injectFAB() {
     const fab = document.createElement('button');
     fab.id        = 'ctz-fab';
     fab.className = 'ctz-fab ctz-fab-idle';
+    
+    // Initial visibility state based on Master Toggle
+    if (extension_settings[CTZ_EXT_NAME].isEnabled === false) {
+        fab.classList.add('ctz-hidden');
+    }
+
     fab.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
     fab.title     = 'Launch Characteryze';
     
@@ -131,6 +133,9 @@ function _injectDrawer() {
     const wrapper = document.createElement('div');
     wrapper.id        = 'ctz-settings-block';
     wrapper.className = 'extension-settings';
+    
+    const isEnabled = extension_settings[CTZ_EXT_NAME].isEnabled !== false;
+
     wrapper.innerHTML = `
         <div class="inline-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
@@ -138,13 +143,11 @@ function _injectDrawer() {
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content">
-                <div style="display:flex;gap:6px;margin-bottom:10px;">
-                    <button id="ctz-launch-btn" class="menu_button">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i> Launch
-                    </button>
-                    <button id="ctz-close-btn" class="menu_button">
-                        <i class="fa-solid fa-right-from-bracket"></i> Close
-                    </button>
+                <div class="ctz-drawer-controls">
+                    <label class="ctz-master-toggle">
+                        <input type="checkbox" id="ctz-master-enable" ${isEnabled ? 'checked' : ''}>
+                        <span>Enable Extension (Show FAB)</span>
+                    </label>
                 </div>
                 <div id="ctz-drawer-settings"></div>
             </div>
@@ -158,11 +161,25 @@ function _injectDrawer() {
 }
 
 function _wireDrawerButtons() {
-    $(document).on('click', '#ctz-launch-btn', async () => {
-        if (isUiActive()) toggleSidebar();
-        else await _onLaunch();
+    $(document).on('change', '#ctz-master-enable', async function() {
+        const isEnabled = $(this).is(':checked');
+        extension_settings[CTZ_EXT_NAME].isEnabled = isEnabled;
+        saveSettingsDebounced();
+        
+        const fab = document.getElementById('ctz-fab');
+        if (isEnabled) {
+            fab?.classList.remove('ctz-hidden');
+            log(TAG, 'Master Toggle: Enabled');
+        } else {
+            fab?.classList.add('ctz-hidden');
+            log(TAG, 'Master Toggle: Disabled — Closing extension');
+            if (isUiActive()) {
+                await _onClose();
+            } else {
+                hideSidebar();
+            }
+        }
     });
-    $(document).on('click', '#ctz-close-btn',  _onClose);
 }
 
 // ─── Launch sequence ──────────────────────────────────────────────────────────
@@ -218,8 +235,6 @@ async function _onClose() {
         await exitForge();
     } catch (err) {
         error(TAG, 'Close sequence error', err);
-        // exitForge sets _uiActive false in its finally block, but if it
-        // throws before reaching that point, clear the flag here as a fallback.
         setUiActive(false);
     } finally {
         const fab = document.getElementById('ctz-fab');
@@ -237,9 +252,11 @@ function _mountPanels() {
     registerPanel('home', container => mountHome(container, {
         activateTab,
         onEnterForge: () => {
-            // Switch to forge tab
             activateTab('forge');
         },
+        onLeaveForge: async () => {
+            await _onClose();
+        }
     }));
     registerPanel('forge',     container => mountForge(container));
     registerPanel('workbench', container => mountWorkbench(container));
