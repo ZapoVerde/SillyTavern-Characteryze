@@ -7,6 +7,8 @@ Here is an updated `README.md` designed specifically for everyday users. It stri
 
 # Characteryze
 
+**[WIP]**
+
 **Characteryze** is a SillyTavern extension that turns your AI into a collaborative writing assistant. 
 
 Have you ever wanted to chat with an AI to brainstorm character details, tweak a system prompt, or design a portrait, but didn't want to mess up your actual chat history or accidentally overwrite your character cards? 
